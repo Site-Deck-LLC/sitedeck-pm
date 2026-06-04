@@ -38,28 +38,6 @@ export function Dashboard({
     load();
   }, [projectId]);
 
-  if (loading) {
-    return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.textSecondary, fontFamily: FONTS.family }}>
-          <div style={{ width: 40, height: 40, border: `3px solid ${COLORS.gray200}`, borderTop: `3px solid ${COLORS.orange}`, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-          Loading dashboard...
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.red, fontFamily: FONTS.family }}>
-          {error}
-        </div>
-      </div>
-    );
-  }
-
   const tiles = dashboard ? Object.entries(dashboard) : [];
 
   // Calculate overall project health
@@ -96,7 +74,32 @@ export function Dashboard({
       <div style={contentLayoutStyle}>
         {/* Left: Tile Grid */}
         <div style={mainAreaStyle}>
-          <header style={headerStyle}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.textSecondary }}>
+              <div style={{ width: 40, height: 40, border: `3px solid ${COLORS.gray200}`, borderTop: `3px solid ${COLORS.orange}`, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+              <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+              Loading dashboard...
+            </div>
+          ) : error ? (
+            <div style={{ textAlign: 'center', padding: '80px 0' }}>
+              <div style={{ color: COLORS.red, fontWeight: FONTS.weight.semibold, marginBottom: 16, fontSize: FONTS.size.md }}>{error}</div>
+              <p style={{ color: COLORS.textSecondary, marginBottom: 20 }}>Your session may have expired or the token is no longer valid.</p>
+              <button onClick={onLogout} style={{
+                padding: '10px 20px',
+                borderRadius: BORDERS.radius.md,
+                border: 'none',
+                background: COLORS.orange,
+                color: COLORS.white,
+                fontSize: FONTS.size.md,
+                fontWeight: FONTS.weight.semibold,
+                cursor: 'pointer',
+              }}>
+                Sign Out and Try Again
+              </button>
+            </div>
+          ) : (
+            <>
+              <header style={headerStyle}>
             <h1 style={titleStyle}>
               Morning Dashboard
             </h1>
@@ -141,6 +144,8 @@ export function Dashboard({
               );
             })}
           </section>
+          </>
+          )}
         </div>
 
         {/* Right: Summary Rail */}

@@ -74,24 +74,6 @@ export function DashboardDetail({
     load();
   }, [projectId, tileKey]);
 
-  if (loading) {
-    return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.textSecondary, fontFamily: FONTS.family }}>
-          Loading {titles[tileKey]}...
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.red, fontFamily: FONTS.family }}>{error}</div>
-      </div>
-    );
-  }
-
   return (
     <div style={pageStyle}>
       {/* Nav */}
@@ -110,8 +92,33 @@ export function DashboardDetail({
       </nav>
 
       <div style={contentStyle}>
-        {/* Cost Gauges */}
-        {tileKey === 'cost' && evm && (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.textSecondary }}>
+            <div style={{ width: 40, height: 40, border: `3px solid ${COLORS.gray200}`, borderTop: `3px solid ${COLORS.orange}`, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+            Loading {titles[tileKey]}...
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+            <div style={{ color: COLORS.red, fontWeight: FONTS.weight.semibold, marginBottom: 16, fontSize: FONTS.size.md }}>{error}</div>
+            <p style={{ color: COLORS.textSecondary, marginBottom: 20 }}>Your session may have expired or the token is no longer valid.</p>
+            <button onClick={onBack} style={{
+              padding: '10px 20px',
+              borderRadius: BORDERS.radius.md,
+              border: 'none',
+              background: COLORS.orange,
+              color: COLORS.white,
+              fontSize: FONTS.size.md,
+              fontWeight: FONTS.weight.semibold,
+              cursor: 'pointer',
+            }}>
+              ← Back to Dashboard
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Cost Gauges */}
+            {tileKey === 'cost' && evm && (
           <div style={gaugesContainerStyle}>
             <div style={gaugeCardStyle}>
               <Gauge value={evm.cpi} label="Cost Performance Index (CPI)" size={160} />
@@ -188,6 +195,8 @@ export function DashboardDetail({
             </div>
           ))}
         </div>
+          </>
+        )}
       </div>
     </div>
   );
