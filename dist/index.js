@@ -12,7 +12,7 @@ function createApp() {
     const app = (0, express_1.default)();
     app.use(express_1.default.json());
     // Serve React frontend build if it exists
-    const frontendDist = path_1.default.join(__dirname, '../../frontend/dist');
+    const frontendDist = path_1.default.join(__dirname, '../frontend/dist');
     app.use(express_1.default.static(frontendDist));
     app.use('/api/v1', routes_1.default);
     // SPA catch-all: serve index.html for any non-API route
