@@ -49,3 +49,63 @@ export function getDashboard(id: string) {
 export function getBillingStatus(orgId: string) {
   return fetchApi(`/api/v1/billing/status?orgId=${encodeURIComponent(orgId)}`);
 }
+
+// ── Schedule ──
+export function getScheduleActivities(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/schedule/activities`);
+}
+
+// ── Cost ──
+export function getBudgetLines(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/cost/budget-lines`);
+}
+
+export function getEvm(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/cost/evm`);
+}
+
+// ── Procurement ──
+export function getPurchaseOrders(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/procurement/purchase-orders`);
+}
+
+export function getInvoices(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/procurement/invoices`);
+}
+
+// ── Integration / Issues ──
+export function getIssues(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/integration/issues`);
+}
+
+// ── Scope ──
+export function getScopeStatements(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/scope/statements`);
+}
+
+export function getChangeOrders(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/scope/change-orders`);
+}
+
+// ── Communications ──
+export function getRfis(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/communications/rfis`);
+}
+
+export function getSubmittals(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/communications/submittals`);
+}
+
+// ── Risk ──
+export function getRisks(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/risk/items`);
+}
+
+// ── Resource ──
+export function getEquipment(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/resource/equipment`);
+}
+
+export function getIdleEquipment(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/resource/idle-equipment`);
+}

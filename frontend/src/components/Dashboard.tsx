@@ -12,10 +12,12 @@ export function Dashboard({
   projectId,
   onBack,
   onLogout,
+  onSelectTile,
 }: {
   projectId: string;
   onBack: () => void;
   onLogout: () => void;
+  onSelectTile: (key: string) => void;
 }) {
   const [dashboard, setDashboard] = useState<Record<string, Tile> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export function Dashboard({
   if (loading) return <div style={styles.center}>Loading dashboard...</div>;
   if (error) return <div style={{ ...styles.center, color: '#dc2626' }}>{error}</div>;
 
-  const tiles = dashboard ? Object.values(dashboard) : [];
+  const tiles = dashboard ? Object.entries(dashboard) : [];
 
   return (
     <div style={styles.page}>
@@ -51,8 +53,12 @@ export function Dashboard({
       </header>
 
       <section style={styles.grid}>
-        {tiles.map((tile) => (
-          <div key={tile.name} style={{ ...styles.card, borderColor: colorMap[tile.status] }}>
+        {tiles.map(([key, tile]) => (
+          <div
+            key={key}
+            style={{ ...styles.card, borderColor: colorMap[tile.status] }}
+            onClick={() => onSelectTile(key)}
+          >
             <div style={{ ...styles.dot, background: colorMap[tile.status] }} />
             <h3>{tile.name}</h3>
             <p style={styles.summary}>{tile.summary}</p>
@@ -118,6 +124,8 @@ const styles: Record<string, React.CSSProperties> = {
     border: '3px solid transparent',
     background: '#fafafa',
     position: 'relative',
+    cursor: 'pointer',
+    transition: 'transform 0.1s, box-shadow 0.1s',
   },
   dot: {
     width: 12,
