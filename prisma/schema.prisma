@@ -450,3 +450,18 @@ model Equipment {
   @@unique([projectId, externalId])
   @@map("equipment")
 }
+
+model BillingAccount {
+  id                   String   @id @default(cuid())
+  orgId                String   @unique @map("org_id")
+  stripeCustomerId     String   @map("stripe_customer_id")
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  planTier             String   @default("starter") @map("plan_tier")
+  status               String   @default("trialing") @map("status")
+  currentPeriodEnd     DateTime @map("current_period_end")
+  projectLimit         Int      @default(3) @map("project_limit")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("billing_accounts")
+}

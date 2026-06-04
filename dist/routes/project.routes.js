@@ -38,8 +38,23 @@ const express_auth_1 = require("../middleware/express-auth");
 const roles_1 = require("../constants/roles");
 const async_handler_1 = require("../lib/async-handler");
 const projectService = __importStar(require("../services/project.service"));
+const billingService = __importStar(require("../services/billing.service"));
+const error_handler_1 = require("../lib/error-handler");
 const router = (0, express_1.Router)();
 router.post('/', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const orgId = req.body.orgId;
+    if (!orgId) {
+        throw (0, error_handler_1.mapServiceErrorToApiError)(new Error('orgId is required'));
+    }
+    let account = await billingService.getBillingAccountByOrgId(orgId);
+    if (!account) {
+        const email = req.user?.decodedToken?.email || 'dev@example.com';
+        account = await billingService.createBillingAccount(orgId, email);
+    }
+    const allowed = await billingService.canCreateProject(orgId);
+    if (!allowed) {
+        throw (0, error_handler_1.mapServiceErrorToApiError)(new Error('Project limit reached for current plan. Upgrade to create more projects.'));
+    }
     const result = await projectService.createProject(req.body);
     res.status(201).json(result);
 }));

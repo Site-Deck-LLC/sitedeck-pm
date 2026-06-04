@@ -17,6 +17,8 @@ const integration_routes_1 = __importDefault(require("./integration.routes"));
 const owners_rep_routes_1 = __importDefault(require("./owners-rep.routes"));
 const resource_routes_1 = __importDefault(require("./resource.routes"));
 const webhook_routes_1 = __importDefault(require("./webhook.routes"));
+const billing_routes_1 = __importDefault(require("./billing.routes"));
+const webhook_stripe_routes_1 = __importDefault(require("./webhook-stripe.routes"));
 const router = (0, express_1.Router)();
 router.use('/health', health_routes_1.default);
 router.use('/projects', project_routes_1.default);
@@ -30,6 +32,8 @@ router.use('/projects/:projectId/risk', risk_routes_1.default);
 router.use('/projects/:projectId/integration', integration_routes_1.default);
 router.use('/projects/:projectId/owners-rep', owners_rep_routes_1.default);
 router.use('/projects/:projectId/resource', resource_routes_1.default);
+router.use('/billing', billing_routes_1.default);
+router.use('/webhooks/stripe', webhook_stripe_routes_1.default);
 router.use('/webhooks', webhook_routes_1.default);
 exports.default = router;
 //# sourceMappingURL=index.js.map

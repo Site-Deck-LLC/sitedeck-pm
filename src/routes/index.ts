@@ -12,6 +12,8 @@ import integrationRouter from './integration.routes';
 import ownersRepRouter from './owners-rep.routes';
 import resourceRouter from './resource.routes';
 import webhookRouter from './webhook.routes';
+import billingRouter from './billing.routes';
+import stripeWebhookRouter from './webhook-stripe.routes';
 
 const router = Router();
 
@@ -27,6 +29,8 @@ router.use('/projects/:projectId/risk', riskRouter);
 router.use('/projects/:projectId/integration', integrationRouter);
 router.use('/projects/:projectId/owners-rep', ownersRepRouter);
 router.use('/projects/:projectId/resource', resourceRouter);
+router.use('/billing', billingRouter);
+router.use('/webhooks/stripe', stripeWebhookRouter);
 router.use('/webhooks', webhookRouter);
 
 export default router;
