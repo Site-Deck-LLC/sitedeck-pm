@@ -69,6 +69,20 @@ export declare function getProjectById(id: string): Promise<({
     createdAt: Date;
     updatedAt: Date;
 }) | null>;
+export declare function listProjects(): Promise<{
+    id: string;
+    name: string;
+    status: string;
+    orgId: string;
+    structureType: string;
+    structureLocked: boolean;
+    startDate: Date | null;
+    endDate: Date | null;
+    activeMilestones: Prisma.JsonValue | null;
+    superintendentAssignments: Prisma.JsonValue | null;
+    createdAt: Date;
+    updatedAt: Date;
+}[]>;
 export declare function updateProject(id: string, data: UpdateProjectInput): Promise<{
     id: string;
     name: string;

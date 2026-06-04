@@ -44,8 +44,8 @@ router.post('/', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(rol
     res.status(201).json(result);
 }));
 router.get('/', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (_req, res) => {
-    // TODO: add listProjects service if needed; for now return empty array
-    res.json([]);
+    const projects = await projectService.listProjects();
+    res.json(projects);
 }));
 router.get('/:id', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const result = await projectService.getProjectById(req.params.id);

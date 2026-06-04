@@ -51,6 +51,13 @@ export async function getProjectById(id: string) {
   });
 }
 
+export async function listProjects() {
+  const prisma = getPrismaClient();
+  return prisma.project.findMany({
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
 export async function updateProject(id: string, data: UpdateProjectInput) {
   const prisma = getPrismaClient();
   return prisma.project.update({

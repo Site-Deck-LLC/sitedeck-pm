@@ -21,8 +21,8 @@ router.get(
   requireAuth,
   requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPERINTENDENT, ROLES.OWNERS_REP),
   asyncHandler(async (_req, res) => {
-    // TODO: add listProjects service if needed; for now return empty array
-    res.json([]);
+    const projects = await projectService.listProjects();
+    res.json(projects);
   })
 );
 

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createProject = createProject;
 exports.getProjectById = getProjectById;
+exports.listProjects = listProjects;
 exports.updateProject = updateProject;
 exports.lockProjectStructure = lockProjectStructure;
 exports.addWorkBreakdownItem = addWorkBreakdownItem;
@@ -28,6 +29,12 @@ async function getProjectById(id) {
     return prisma.project.findUnique({
         where: { id },
         include: { workBreakdownItems: true },
+    });
+}
+async function listProjects() {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    return prisma.project.findMany({
+        orderBy: { createdAt: 'desc' },
     });
 }
 async function updateProject(id, data) {
