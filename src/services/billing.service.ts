@@ -35,12 +35,18 @@ export async function createBillingAccount(
   email: string
 ): Promise<BillingAccount> {
   const prisma = getPrismaClient();
-  const stripe = getStripeClient();
 
-  const customer = await stripe.customers.create({
-    email,
-    metadata: { orgId },
-  });
+  let stripeCustomerId = `local-${orgId}`;
+  try {
+    const stripe = getStripeClient();
+    const customer = await stripe.customers.create({
+      email,
+      metadata: { orgId },
+    });
+    stripeCustomerId = customer.id;
+  } catch {
+    // Stripe not configured — create local-only billing account
+  }
 
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + 14);
@@ -48,7 +54,7 @@ export async function createBillingAccount(
   return prisma.billingAccount.create({
     data: {
       orgId,
-      stripeCustomerId: customer.id,
+      stripeCustomerId,
       planTier: 'starter',
       status: 'trialing',
       projectLimit: PLANS.starter.projectLimit,

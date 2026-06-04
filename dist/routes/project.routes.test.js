@@ -10,17 +10,25 @@ const auth_service_1 = require("../services/auth.service");
 const mockProjectCreate = jest.fn();
 const mockProjectFindUnique = jest.fn();
 const mockProjectUpdate = jest.fn();
+const mockProjectCount = jest.fn();
 const mockWorkBreakdownItemCreate = jest.fn();
 const mockWorkBreakdownItemCount = jest.fn();
+const mockBillingAccountFindUnique = jest.fn();
+const mockBillingAccountCreate = jest.fn();
 const mockPrisma = {
     project: {
         create: mockProjectCreate,
         findUnique: mockProjectFindUnique,
         update: mockProjectUpdate,
+        count: mockProjectCount,
     },
     workBreakdownItem: {
         create: mockWorkBreakdownItemCreate,
         count: mockWorkBreakdownItemCount,
+    },
+    billingAccount: {
+        findUnique: mockBillingAccountFindUnique,
+        create: mockBillingAccountCreate,
     },
 };
 const mockVerifyIdToken = jest.fn();
@@ -29,6 +37,13 @@ const mockAuth = {
 };
 beforeEach(() => {
     jest.clearAllMocks();
+    mockBillingAccountFindUnique.mockResolvedValue({
+        orgId: 'org-1',
+        status: 'active',
+        planTier: 'professional',
+        projectLimit: 999,
+    });
+    mockProjectCount.mockResolvedValue(0);
     (0, prisma_1.setPrismaClient)(mockPrisma);
     (0, auth_service_1.setAuthInstance)(mockAuth);
 });
