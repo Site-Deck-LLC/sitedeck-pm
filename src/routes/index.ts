@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import authRouter from './auth.routes';
 import healthRouter from './health.routes';
 import projectRouter from './project.routes';
 import scheduleRouter from './schedule.routes';
@@ -17,6 +18,7 @@ import stripeWebhookRouter from './webhook-stripe.routes';
 
 const router = Router();
 
+router.use('/auth', authRouter);
 router.use('/health', healthRouter);
 router.use('/projects', projectRouter);
 router.use('/projects/:projectId/schedule', scheduleRouter);

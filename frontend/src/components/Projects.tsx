@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getProjects, getBillingStatus } from '../api';
+import { COLORS, FONTS, SHADOWS, BORDERS } from '../styles/design-system';
 
 interface Project {
   id: string;
   name: string;
   status: string;
+  orgId: string;
   startDate?: string;
   endDate?: string;
 }
@@ -13,7 +15,6 @@ export function Projects({
   onSelectProject,
   onLogout,
 }: {
-  token: string;
   onSelectProject: (id: string) => void;
   onLogout: () => void;
 }) {
@@ -40,100 +41,159 @@ export function Projects({
     load();
   }, []);
 
-  if (loading) return <div style={styles.center}>Loading...</div>;
-  if (error) return <div style={{ ...styles.center, color: '#dc2626' }}>{error}</div>;
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: COLORS.offWhite, fontFamily: FONTS.family }}>
+        <div style={{ textAlign: 'center', padding: '120px 0', color: COLORS.textSecondary }}>
+          <div style={{ width: 40, height: 40, border: `3px solid ${COLORS.gray200}`, borderTop: `3px solid ${COLORS.orange}`, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          Loading projects...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ minHeight: '100vh', background: COLORS.offWhite, fontFamily: FONTS.family }}>
+        <div style={{ textAlign: 'center', padding: '120px 0', color: COLORS.red }}>{error}</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <h1>SiteDeck PM</h1>
-        <div style={styles.meta}>
-          {billing && (
-            <span style={styles.badge}>
-              {billing.planTier} — {billing.projectCount}/{billing.projectLimit} projects
-            </span>
-          )}
-          <button onClick={onLogout} style={styles.logout}>Logout</button>
-        </div>
-      </header>
-
-      <section style={styles.grid}>
-        {projects.map((p) => (
-          <div
-            key={p.id}
-            style={styles.card}
-            onClick={() => onSelectProject(p.id)}
-          >
-            <h3>{p.name}</h3>
-            <p style={styles.status}>Status: {p.status}</p>
-            <p style={styles.dates}>
-              {p.startDate?.slice(0, 10)} → {p.endDate?.slice(0, 10)}
-            </p>
+    <div style={{ minHeight: '100vh', background: COLORS.offWhite, fontFamily: FONTS.family }}>
+      {/* Nav */}
+      <nav style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px 24px',
+        background: COLORS.navy,
+        color: COLORS.white,
+        borderBottom: `1px solid ${COLORS.navyLight}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: COLORS.orange, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: FONTS.weight.bold, fontSize: FONTS.size.sm }}>
+            SD
           </div>
-        ))}
-        {projects.length === 0 && <p>No projects yet.</p>}
-      </section>
+          <span style={{ fontSize: FONTS.size.md, fontWeight: FONTS.weight.bold }}>SiteDeck PM</span>
+        </div>
+        <button onClick={onLogout} style={{
+          padding: '6px 14px',
+          borderRadius: BORDERS.radius.sm,
+          border: 'none',
+          background: COLORS.orange,
+          color: COLORS.white,
+          fontSize: FONTS.size.sm,
+          fontWeight: FONTS.weight.semibold,
+          cursor: 'pointer',
+        }}>
+          Sign Out
+        </button>
+      </nav>
+
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 32 }}>
+        <header style={{ marginBottom: 32 }}>
+          <h1 style={{ fontSize: FONTS.size.xxl, fontWeight: FONTS.weight.bold, color: COLORS.textPrimary, margin: '0 0 4px 0' }}>
+            Projects
+          </h1>
+          <p style={{ fontSize: FONTS.size.md, color: COLORS.textSecondary, margin: 0 }}>
+            Select a project to view the dashboard
+          </p>
+        </header>
+
+        {billing && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '10px 16px',
+            borderRadius: BORDERS.radius.md,
+            background: COLORS.white,
+            border: `1px solid ${COLORS.gray200}`,
+            marginBottom: 24,
+            boxShadow: SHADOWS.sm,
+          }}>
+            <span style={{ fontSize: FONTS.size.sm, color: COLORS.textSecondary }}>Plan:</span>
+            <span style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: COLORS.orange, textTransform: 'uppercase' }}>{billing.planTier}</span>
+            <span style={{ color: COLORS.gray300 }}>|</span>
+            <span style={{ fontSize: FONTS.size.sm, color: COLORS.textSecondary }}>{billing.projectCount} / {billing.projectLimit} projects</span>
+            <span style={{ color: COLORS.gray300 }}>|</span>
+            <span style={{ fontSize: FONTS.size.sm, color: COLORS.textSecondary }}>Status:</span>
+            <span style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: billing.status === 'active' ? COLORS.green : billing.status === 'trialing' ? COLORS.amber : COLORS.red }}>
+              {billing.status}
+            </span>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
+          {projects.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                padding: 24,
+                borderRadius: BORDERS.radius.lg,
+                border: `1px solid ${COLORS.gray200}`,
+                background: COLORS.white,
+                boxShadow: SHADOWS.md,
+                cursor: 'pointer',
+                transition: 'transform 0.15s, box-shadow 0.15s',
+              }}
+              onClick={() => onSelectProject(p.id)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = SHADOWS.lg;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = SHADOWS.md;
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h3 style={{ fontSize: FONTS.size.lg, fontWeight: FONTS.weight.bold, color: COLORS.textPrimary, margin: 0, lineHeight: 1.3 }}>
+                  {p.name}
+                </h3>
+                <span style={{
+                  padding: '4px 10px',
+                  borderRadius: '20px',
+                  fontSize: FONTS.size.xs,
+                  fontWeight: FONTS.weight.semibold,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  background: p.status === 'active' ? COLORS.greenLight : COLORS.gray100,
+                  color: p.status === 'active' ? COLORS.green : COLORS.textSecondary,
+                }}>
+                  {p.status}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Start</div>
+                  <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{p.startDate?.slice(0, 10) || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>End</div>
+                  <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{p.endDate?.slice(0, 10) || '—'}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: FONTS.size.xs, color: COLORS.orange, fontWeight: FONTS.weight.semibold, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  View Dashboard →
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {projects.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 60, color: COLORS.textMuted, gridColumn: '1 / -1' }}>
+              No projects found.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    maxWidth: 960,
-    margin: '0 auto',
-    padding: 24,
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-  },
-  center: {
-    textAlign: 'center',
-    marginTop: 80,
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  meta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-  },
-  badge: {
-    fontSize: 12,
-    padding: '4px 10px',
-    borderRadius: 12,
-    background: '#e5e7eb',
-    color: '#374151',
-  },
-  logout: {
-    padding: '6px 12px',
-    borderRadius: 6,
-    border: '1px solid #ccc',
-    background: '#fff',
-    cursor: 'pointer',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-    gap: 16,
-  },
-  card: {
-    padding: 20,
-    borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    cursor: 'pointer',
-    transition: 'box-shadow 0.15s',
-  },
-  status: {
-    color: '#6b7280',
-    fontSize: 14,
-    margin: '4px 0',
-  },
-  dates: {
-    color: '#9ca3af',
-    fontSize: 12,
-    margin: 0,
-  },
-};

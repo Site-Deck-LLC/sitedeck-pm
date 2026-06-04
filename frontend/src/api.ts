@@ -30,6 +30,21 @@ export async function login(token: string) {
   return fetchApi('/api/v1/health');
 }
 
+export async function loginDev(_email: string, _password: string) {
+  const res = await fetch(`${API_BASE}/api/v1/auth/dev-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: _email, password: _password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  localStorage.setItem('token', data.idToken);
+  return data;
+}
+
 export function logout() {
   localStorage.removeItem('token');
 }

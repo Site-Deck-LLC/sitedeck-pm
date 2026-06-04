@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const auth_routes_1 = __importDefault(require("./auth.routes"));
 const health_routes_1 = __importDefault(require("./health.routes"));
 const project_routes_1 = __importDefault(require("./project.routes"));
 const schedule_routes_1 = __importDefault(require("./schedule.routes"));
@@ -20,6 +21,7 @@ const webhook_routes_1 = __importDefault(require("./webhook.routes"));
 const billing_routes_1 = __importDefault(require("./billing.routes"));
 const webhook_stripe_routes_1 = __importDefault(require("./webhook-stripe.routes"));
 const router = (0, express_1.Router)();
+router.use('/auth', auth_routes_1.default);
 router.use('/health', health_routes_1.default);
 router.use('/projects', project_routes_1.default);
 router.use('/projects/:projectId/schedule', schedule_routes_1.default);
