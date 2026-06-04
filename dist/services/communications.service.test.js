@@ -1,0 +1,454 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const prisma_1 = require("../lib/prisma");
+const communications_service_1 = require("./communications.service");
+const mockRfiCreate = jest.fn();
+const mockRfiFindUnique = jest.fn();
+const mockRfiFindFirst = jest.fn();
+const mockRfiFindMany = jest.fn();
+const mockRfiCount = jest.fn();
+const mockRfiUpdate = jest.fn();
+const mockSubmittalCreate = jest.fn();
+const mockSubmittalFindUnique = jest.fn();
+const mockSubmittalFindMany = jest.fn();
+const mockSubmittalCount = jest.fn();
+const mockSubmittalUpdate = jest.fn();
+const mockPrisma = {
+    rfi: {
+        create: mockRfiCreate,
+        findUnique: mockRfiFindUnique,
+        findFirst: mockRfiFindFirst,
+        findMany: mockRfiFindMany,
+        count: mockRfiCount,
+        update: mockRfiUpdate,
+    },
+    submittal: {
+        create: mockSubmittalCreate,
+        findUnique: mockSubmittalFindUnique,
+        findMany: mockSubmittalFindMany,
+        count: mockSubmittalCount,
+        update: mockSubmittalUpdate,
+    },
+};
+beforeEach(() => {
+    jest.clearAllMocks();
+    (0, prisma_1.setPrismaClient)(mockPrisma);
+});
+describe('communications.service', () => {
+    describe('RFI log', () => {
+        it('creates an RFI with auto-numbered rfiNumber', async () => {
+            mockRfiCount.mockResolvedValue(2);
+            const created = {
+                id: 'rfi-1',
+                rfiNumber: `RFI-${new Date().getFullYear()}-0003`,
+                projectId: 'proj-1',
+                subject: 'Foundation depth',
+                description: 'What is the required depth?',
+                status: 'draft',
+                submittedBy: 'user-1',
+            };
+            mockRfiCreate.mockResolvedValue(created);
+            const result = await (0, communications_service_1.createRfi)({
+                projectId: 'proj-1',
+                subject: 'Foundation depth',
+                description: 'What is the required depth?',
+                submittedBy: 'user-1',
+            });
+            expect(mockRfiCount).toHaveBeenCalledWith({ where: { projectId: 'proj-1' } });
+            expect(mockRfiCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    rfiNumber: `RFI-${new Date().getFullYear()}-0003`,
+                    subject: 'Foundation depth',
+                    description: 'What is the required depth?',
+                    status: 'draft',
+                    submittedBy: 'user-1',
+                }),
+            });
+            expect(result.rfiNumber).toBe(`RFI-${new Date().getFullYear()}-0003`);
+        });
+        it('creates an RFI with optional fields', async () => {
+            mockRfiCount.mockResolvedValue(0);
+            const created = {
+                id: 'rfi-1',
+                rfiNumber: `RFI-${new Date().getFullYear()}-0001`,
+                projectId: 'proj-1',
+                subject: 'Rebar spec',
+                description: 'Grade required?',
+                status: 'draft',
+                submittedBy: 'user-1',
+                assignedTo: 'user-2',
+                holdOnActivityId: 'act-1',
+            };
+            mockRfiCreate.mockResolvedValue(created);
+            const result = await (0, communications_service_1.createRfi)({
+                projectId: 'proj-1',
+                subject: 'Rebar spec',
+                description: 'Grade required?',
+                submittedBy: 'user-1',
+                assignedTo: 'user-2',
+                holdOnActivityId: 'act-1',
+            });
+            expect(mockRfiCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    assignedTo: 'user-2',
+                    holdOnActivityId: 'act-1',
+                }),
+            });
+            expect(result).toEqual(created);
+        });
+        it('returns existing RFI when sourceReference already exists (idempotency)', async () => {
+            const existing = {
+                id: 'rfi-existing',
+                rfiNumber: `RFI-${new Date().getFullYear()}-0001`,
+                projectId: 'proj-1',
+                subject: 'Existing',
+                description: 'Existing desc',
+                status: 'draft',
+                submittedBy: 'user-1',
+                sourceReference: 'webhook-123',
+            };
+            mockRfiFindFirst.mockResolvedValue(existing);
+            const result = await (0, communications_service_1.createRfi)({
+                projectId: 'proj-1',
+                subject: 'New subject',
+                description: 'New desc',
+                submittedBy: 'user-1',
+                sourceReference: 'webhook-123',
+            });
+            expect(mockRfiFindFirst).toHaveBeenCalledWith({
+                where: {
+                    projectId: 'proj-1',
+                    sourceReference: 'webhook-123',
+                },
+            });
+            expect(mockRfiCreate).not.toHaveBeenCalled();
+            expect(result).toEqual(existing);
+        });
+        it('creates RFI when sourceReference is unique', async () => {
+            mockRfiFindFirst.mockResolvedValue(null);
+            mockRfiCount.mockResolvedValue(0);
+            const created = {
+                id: 'rfi-1',
+                rfiNumber: `RFI-${new Date().getFullYear()}-0001`,
+                projectId: 'proj-1',
+                subject: 'New',
+                description: 'New desc',
+                status: 'draft',
+                submittedBy: 'user-1',
+                sourceReference: 'webhook-456',
+            };
+            mockRfiCreate.mockResolvedValue(created);
+            const result = await (0, communications_service_1.createRfi)({
+                projectId: 'proj-1',
+                subject: 'New',
+                description: 'New desc',
+                submittedBy: 'user-1',
+                sourceReference: 'webhook-456',
+            });
+            expect(mockRfiFindFirst).toHaveBeenCalled();
+            expect(mockRfiCreate).toHaveBeenCalled();
+            expect(result).toEqual(created);
+        });
+        it('returns RFI by id', async () => {
+            const rfi = { id: 'rfi-1', rfiNumber: 'RFI-2026-0001' };
+            mockRfiFindUnique.mockResolvedValue(rfi);
+            const result = await (0, communications_service_1.getRfiById)('rfi-1');
+            expect(mockRfiFindUnique).toHaveBeenCalledWith({ where: { id: 'rfi-1' } });
+            expect(result).toEqual(rfi);
+        });
+        it('returns RFIs by project ordered by createdAt desc', async () => {
+            const rfis = [
+                { id: 'rfi-2', createdAt: new Date('2026-06-02') },
+                { id: 'rfi-1', createdAt: new Date('2026-06-01') },
+            ];
+            mockRfiFindMany.mockResolvedValue(rfis);
+            const result = await (0, communications_service_1.getRfiByProject)('proj-1');
+            expect(mockRfiFindMany).toHaveBeenCalledWith({
+                where: { projectId: 'proj-1' },
+                orderBy: { createdAt: 'desc' },
+            });
+            expect(result).toEqual(rfis);
+        });
+        it('submits an RFI', async () => {
+            const updated = { id: 'rfi-1', status: 'submitted', submittedAt: new Date() };
+            mockRfiUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.submitRfi)('rfi-1');
+            expect(mockRfiUpdate).toHaveBeenCalledWith({
+                where: { id: 'rfi-1' },
+                data: {
+                    status: 'submitted',
+                    submittedAt: expect.any(Date),
+                },
+            });
+            expect(result.status).toBe('submitted');
+        });
+        it('answers an RFI', async () => {
+            const updated = {
+                id: 'rfi-1',
+                status: 'answered',
+                responseText: 'Use grade 60 rebar',
+                answeredAt: new Date(),
+                assignedTo: 'pm-1',
+            };
+            mockRfiUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.answerRfi)('rfi-1', 'Use grade 60 rebar', 'pm-1');
+            expect(mockRfiUpdate).toHaveBeenCalledWith({
+                where: { id: 'rfi-1' },
+                data: {
+                    status: 'answered',
+                    responseText: 'Use grade 60 rebar',
+                    answeredAt: expect.any(Date),
+                    assignedTo: 'pm-1',
+                },
+            });
+            expect(result.status).toBe('answered');
+        });
+        it('closes an RFI', async () => {
+            const updated = { id: 'rfi-1', status: 'closed' };
+            mockRfiUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.closeRfi)('rfi-1');
+            expect(mockRfiUpdate).toHaveBeenCalledWith({
+                where: { id: 'rfi-1' },
+                data: {
+                    status: 'closed',
+                },
+            });
+            expect(result.status).toBe('closed');
+        });
+        it('returns PDF data for an RFI', async () => {
+            const rfi = {
+                id: 'rfi-1',
+                rfiNumber: 'RFI-2026-0001',
+                subject: 'Foundation depth',
+                description: 'What is the required depth?',
+                status: 'answered',
+                submittedBy: 'user-1',
+                submittedAt: new Date('2026-06-01'),
+                responseText: '5 feet minimum',
+                answeredAt: new Date('2026-06-02'),
+                project: { name: 'Test Project' },
+            };
+            mockRfiFindUnique.mockResolvedValue(rfi);
+            const result = await (0, communications_service_1.getRfiPdfData)('rfi-1');
+            expect(mockRfiFindUnique).toHaveBeenCalledWith({
+                where: { id: 'rfi-1' },
+                include: { project: true },
+            });
+            expect(result).toEqual({
+                rfiNumber: 'RFI-2026-0001',
+                subject: 'Foundation depth',
+                description: 'What is the required depth?',
+                status: 'answered',
+                submittedBy: 'user-1',
+                submittedAt: new Date('2026-06-01'),
+                responseText: '5 feet minimum',
+                answeredAt: new Date('2026-06-02'),
+                projectName: 'Test Project',
+            });
+        });
+        it('throws when PDF data requested for non-existent RFI', async () => {
+            mockRfiFindUnique.mockResolvedValue(null);
+            await expect((0, communications_service_1.getRfiPdfData)('rfi-1')).rejects.toThrow('RFI not found');
+        });
+    });
+    describe('Submittal register', () => {
+        it('creates a submittal with auto-numbered submittalNumber', async () => {
+            mockSubmittalCount.mockResolvedValue(2);
+            const created = {
+                id: 'sub-1',
+                submittalNumber: `SUB-${new Date().getFullYear()}-0003`,
+                projectId: 'proj-1',
+                title: 'Concrete mix design',
+                description: 'Submit mix design for review',
+                status: 'pending',
+                submittedBy: 'user-1',
+            };
+            mockSubmittalCreate.mockResolvedValue(created);
+            const result = await (0, communications_service_1.createSubmittal)({
+                projectId: 'proj-1',
+                title: 'Concrete mix design',
+                description: 'Submit mix design for review',
+                submittedBy: 'user-1',
+            });
+            expect(mockSubmittalCount).toHaveBeenCalledWith({ where: { projectId: 'proj-1' } });
+            expect(mockSubmittalCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    submittalNumber: `SUB-${new Date().getFullYear()}-0003`,
+                    title: 'Concrete mix design',
+                    description: 'Submit mix design for review',
+                    status: 'pending',
+                    submittedBy: 'user-1',
+                }),
+            });
+            expect(result.submittalNumber).toBe(`SUB-${new Date().getFullYear()}-0003`);
+        });
+        it('creates a submittal with optional fields', async () => {
+            mockSubmittalCount.mockResolvedValue(0);
+            const created = {
+                id: 'sub-1',
+                submittalNumber: `SUB-${new Date().getFullYear()}-0001`,
+                projectId: 'proj-1',
+                title: 'Steel certification',
+                description: 'Mill certs',
+                status: 'pending',
+                specSection: '03400',
+                submittedBy: 'user-1',
+                holdOnActivityId: 'act-1',
+            };
+            mockSubmittalCreate.mockResolvedValue(created);
+            const result = await (0, communications_service_1.createSubmittal)({
+                projectId: 'proj-1',
+                title: 'Steel certification',
+                description: 'Mill certs',
+                submittedBy: 'user-1',
+                specSection: '03400',
+                holdOnActivityId: 'act-1',
+            });
+            expect(mockSubmittalCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    specSection: '03400',
+                    holdOnActivityId: 'act-1',
+                }),
+            });
+            expect(result).toEqual(created);
+        });
+        it('returns submittal by id', async () => {
+            const submittal = { id: 'sub-1', submittalNumber: 'SUB-2026-0001' };
+            mockSubmittalFindUnique.mockResolvedValue(submittal);
+            const result = await (0, communications_service_1.getSubmittalById)('sub-1');
+            expect(mockSubmittalFindUnique).toHaveBeenCalledWith({ where: { id: 'sub-1' } });
+            expect(result).toEqual(submittal);
+        });
+        it('returns submittals by project ordered by createdAt desc', async () => {
+            const submittals = [
+                { id: 'sub-2', createdAt: new Date('2026-06-02') },
+                { id: 'sub-1', createdAt: new Date('2026-06-01') },
+            ];
+            mockSubmittalFindMany.mockResolvedValue(submittals);
+            const result = await (0, communications_service_1.getSubmittalsByProject)('proj-1');
+            expect(mockSubmittalFindMany).toHaveBeenCalledWith({
+                where: { projectId: 'proj-1' },
+                orderBy: { createdAt: 'desc' },
+            });
+            expect(result).toEqual(submittals);
+        });
+        it('submits a submittal', async () => {
+            const updated = { id: 'sub-1', status: 'submitted', submittedAt: new Date() };
+            mockSubmittalUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.submitSubmittal)('sub-1');
+            expect(mockSubmittalUpdate).toHaveBeenCalledWith({
+                where: { id: 'sub-1' },
+                data: {
+                    status: 'submitted',
+                    submittedAt: expect.any(Date),
+                },
+            });
+            expect(result.status).toBe('submitted');
+        });
+        it('reviews a submittal as approved', async () => {
+            const existing = { id: 'sub-1', description: 'Original desc' };
+            mockSubmittalFindUnique.mockResolvedValue(existing);
+            const updated = { id: 'sub-1', status: 'approved', reviewedBy: 'pm-1', reviewedAt: new Date() };
+            mockSubmittalUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.reviewSubmittal)('sub-1', 'approved', 'pm-1');
+            expect(mockSubmittalUpdate).toHaveBeenCalledWith({
+                where: { id: 'sub-1' },
+                data: {
+                    status: 'approved',
+                    reviewedBy: 'pm-1',
+                    reviewedAt: expect.any(Date),
+                    description: 'Original desc',
+                },
+            });
+            expect(result.status).toBe('approved');
+        });
+        it('reviews a submittal as rejected with notes', async () => {
+            const existing = { id: 'sub-1', description: 'Original desc' };
+            mockSubmittalFindUnique.mockResolvedValue(existing);
+            const updated = {
+                id: 'sub-1',
+                status: 'rejected',
+                reviewedBy: 'pm-1',
+                reviewedAt: new Date(),
+                description: 'Original desc\n\nReview notes: Missing test data',
+            };
+            mockSubmittalUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.reviewSubmittal)('sub-1', 'rejected', 'pm-1', 'Missing test data');
+            expect(mockSubmittalUpdate).toHaveBeenCalledWith({
+                where: { id: 'sub-1' },
+                data: {
+                    status: 'rejected',
+                    reviewedBy: 'pm-1',
+                    reviewedAt: expect.any(Date),
+                    description: 'Original desc\n\nReview notes: Missing test data',
+                },
+            });
+            expect(result.status).toBe('rejected');
+        });
+        it('reviews a submittal as revision_required', async () => {
+            const existing = { id: 'sub-1', description: null };
+            mockSubmittalFindUnique.mockResolvedValue(existing);
+            const updated = {
+                id: 'sub-1',
+                status: 'revision_required',
+                reviewedBy: 'pm-1',
+                reviewedAt: new Date(),
+                description: '\n\nReview notes: Revise and resubmit',
+            };
+            mockSubmittalUpdate.mockResolvedValue(updated);
+            const result = await (0, communications_service_1.reviewSubmittal)('sub-1', 'revision_required', 'pm-1', 'Revise and resubmit');
+            expect(mockSubmittalUpdate).toHaveBeenCalledWith({
+                where: { id: 'sub-1' },
+                data: {
+                    status: 'revision_required',
+                    reviewedBy: 'pm-1',
+                    reviewedAt: expect.any(Date),
+                    description: '\n\nReview notes: Revise and resubmit',
+                },
+            });
+            expect(result.status).toBe('revision_required');
+        });
+        it('throws when reviewing non-existent submittal', async () => {
+            mockSubmittalFindUnique.mockResolvedValue(null);
+            await expect((0, communications_service_1.reviewSubmittal)('sub-1', 'approved', 'pm-1')).rejects.toThrow('Submittal not found');
+        });
+        it('returns PDF data for a submittal', async () => {
+            const submittal = {
+                id: 'sub-1',
+                submittalNumber: 'SUB-2026-0001',
+                title: 'Concrete mix design',
+                description: 'Submit mix design',
+                status: 'approved',
+                specSection: '03400',
+                submittedBy: 'user-1',
+                submittedAt: new Date('2026-06-01'),
+                reviewedBy: 'pm-1',
+                reviewedAt: new Date('2026-06-03'),
+                project: { name: 'Test Project' },
+            };
+            mockSubmittalFindUnique.mockResolvedValue(submittal);
+            const result = await (0, communications_service_1.getSubmittalPdfData)('sub-1');
+            expect(mockSubmittalFindUnique).toHaveBeenCalledWith({
+                where: { id: 'sub-1' },
+                include: { project: true },
+            });
+            expect(result).toEqual({
+                submittalNumber: 'SUB-2026-0001',
+                title: 'Concrete mix design',
+                description: 'Submit mix design',
+                status: 'approved',
+                specSection: '03400',
+                submittedBy: 'user-1',
+                submittedAt: new Date('2026-06-01'),
+                reviewedBy: 'pm-1',
+                reviewedAt: new Date('2026-06-03'),
+                projectName: 'Test Project',
+            });
+        });
+        it('throws when PDF data requested for non-existent submittal', async () => {
+            mockSubmittalFindUnique.mockResolvedValue(null);
+            await expect((0, communications_service_1.getSubmittalPdfData)('sub-1')).rejects.toThrow('Submittal not found');
+        });
+    });
+});
+//# sourceMappingURL=communications.service.test.js.map

@@ -1,0 +1,890 @@
+openapi: 3.0.3
+info:
+  title: SiteDeck PM API
+  description: Project management API for EPC contractors. V1 scope.
+  version: 1.0.0
+  contact:
+    name: Site Deck LLC
+servers:
+  - url: /api/v1
+    description: V1 API
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: sitedeck-pm }
+                  version: { type: string, example: 1.0.0 }
+
+  /projects:
+    get:
+      summary: List projects
+      tags: [Projects]
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      summary: Create project
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, orgId, structureType]
+              properties:
+                name: { type: string }
+                orgId: { type: string }
+                structureType: { type: string, enum: [WBS, COST_CODE] }
+                startDate: { type: string, format: date-time }
+                endDate: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /projects/{projectId}:
+    get:
+      summary: Get project by ID
+      tags: [Projects]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    patch:
+      summary: Update project
+      tags: [Projects]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                startDate: { type: string, format: date-time }
+                endDate: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    delete:
+      summary: Delete (cancel) project
+      tags: [Projects]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project cancelled
+
+  /projects/{projectId}/wbs-items:
+    post:
+      summary: Add WBS item
+      tags: [Projects]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: { type: string }
+                name: { type: string }
+                parentId: { type: string }
+                level: { type: integer }
+      responses:
+        '201':
+          description: WBS item created
+
+  /projects/{projectId}/schedule/activities:
+    get:
+      summary: List schedule activities
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Activities list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleActivity'
+    post:
+      summary: Create schedule activity
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleActivityInput'
+      responses:
+        '201':
+          description: Activity created
+
+  /projects/{projectId}/schedule/activities/{activityId}:
+    get:
+      summary: Get activity
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: activityId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Activity details
+    patch:
+      summary: Update activity
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: activityId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleActivityInput'
+      responses:
+        '200':
+          description: Updated activity
+    delete:
+      summary: Delete activity
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: activityId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted activity
+
+  /projects/{projectId}/schedule/baselines:
+    get:
+      summary: List baselines
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Baselines list
+    post:
+      summary: Create baseline
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, createdBy]
+              properties:
+                name: { type: string }
+                createdBy: { type: string }
+      responses:
+        '201':
+          description: Baseline created
+
+  /projects/{projectId}/schedule/change-requests:
+    get:
+      summary: List change requests
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Change requests list
+    post:
+      summary: Create change request
+      tags: [Schedule]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activityId, requestedBy, reasonCode]
+              properties:
+                activityId: { type: string }
+                requestedBy: { type: string }
+                reasonCode: { type: string }
+                proposedStart: { type: string, format: date-time }
+                proposedEnd: { type: string, format: date-time }
+                impactDescription: { type: string }
+      responses:
+        '201':
+          description: Change request created
+
+  /projects/{projectId}/cost/budget-lines:
+    get:
+      summary: List budget lines
+      tags: [Cost]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Budget lines list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BudgetLine'
+    post:
+      summary: Create budget line
+      tags: [Cost]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, budgetAmount]
+              properties:
+                name: { type: string }
+                budgetAmount: { type: number }
+                wbsItemId: { type: string }
+                costCode: { type: string }
+                varianceThreshold: { type: number }
+      responses:
+        '201':
+          description: Budget line created
+
+  /projects/{projectId}/cost/evm:
+    get:
+      summary: Calculate project EVM
+      tags: [Cost]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: EVM results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvmResult'
+
+  /projects/{projectId}/dashboard/morning:
+    get:
+      summary: Morning dashboard
+      tags: [Dashboard]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: safetyData
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Dashboard tiles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MorningDashboard'
+
+  /projects/{projectId}/procurement/purchase-orders:
+    get:
+      summary: List purchase orders
+      tags: [Procurement]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: PO list
+    post:
+      summary: Create purchase order
+      tags: [Procurement]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [poNumber, vendorName, createdBy, lineItems]
+              properties:
+                poNumber: { type: string }
+                vendorName: { type: string }
+                createdBy: { type: string }
+                lineItems:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      materialName: { type: string }
+                      quantity: { type: number }
+                      unit: { type: string }
+                      unitPrice: { type: number }
+      responses:
+        '201':
+          description: PO created
+
+  /projects/{projectId}/procurement/subcontracts:
+    get:
+      summary: List subcontracts
+      tags: [Procurement]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Subcontracts list
+    post:
+      summary: Create subcontract
+      tags: [Procurement]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subcontractorName, contractAmount]
+              properties:
+                subcontractorName: { type: string }
+                contractAmount: { type: number }
+      responses:
+        '201':
+          description: Subcontract created
+
+  /projects/{projectId}/scope/scope-statements:
+    get:
+      summary: List scope statements
+      tags: [Scope]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Scope statements list
+    post:
+      summary: Create scope statement
+      tags: [Scope]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, createdBy]
+              properties:
+                content: { type: string }
+                createdBy: { type: string }
+      responses:
+        '201':
+          description: Scope statement created
+
+  /projects/{projectId}/scope/change-orders:
+    get:
+      summary: List change orders
+      tags: [Scope]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Change orders list
+    post:
+      summary: Create change order
+      tags: [Scope]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [coNumber, date, description]
+              properties:
+                coNumber: { type: string }
+                date: { type: string, format: date-time }
+                description: { type: string }
+                dollarValue: { type: number }
+                scheduleImpact: { type: number }
+      responses:
+        '201':
+          description: Change order created
+
+  /projects/{projectId}/communications/rfis:
+    get:
+      summary: List RFIs
+      tags: [Communications]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: RFI list
+    post:
+      summary: Create RFI
+      tags: [Communications]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rfiNumber, subject, description, submittedBy]
+              properties:
+                rfiNumber: { type: string }
+                subject: { type: string }
+                description: { type: string }
+                submittedBy: { type: string }
+      responses:
+        '201':
+          description: RFI created
+
+  /projects/{projectId}/communications/submittals:
+    get:
+      summary: List submittals
+      tags: [Communications]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Submittals list
+    post:
+      summary: Create submittal
+      tags: [Communications]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [submittalNumber, title, submittedBy]
+              properties:
+                submittalNumber: { type: string }
+                title: { type: string }
+                description: { type: string }
+                submittedBy: { type: string }
+      responses:
+        '201':
+          description: Submittal created
+
+  /projects/{projectId}/risk/risk-items:
+    get:
+      summary: List risk items
+      tags: [Risk]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Risk items list
+    post:
+      summary: Create risk item
+      tags: [Risk]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description, category, probability, impact, owner]
+              properties:
+                description: { type: string }
+                category: { type: string }
+                probability: { type: string }
+                impact: { type: string }
+                owner: { type: string }
+                mitigationPlan: { type: string }
+      responses:
+        '201':
+          description: Risk item created
+
+  /projects/{projectId}/integration/issues:
+    get:
+      summary: List issues
+      tags: [Integration]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Issues list
+    post:
+      summary: Create issue
+      tags: [Integration]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, source, title, description, createdBy]
+              properties:
+                type: { type: string }
+                source: { type: string }
+                title: { type: string }
+                description: { type: string }
+                createdBy: { type: string }
+      responses:
+        '201':
+          description: Issue created
+
+  /projects/{projectId}/resource/equipment:
+    get:
+      summary: List equipment
+      tags: [Resource]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Equipment list
+
+  /projects/{projectId}/resource/idle-equipment:
+    get:
+      summary: Idle equipment on critical path
+      tags: [Resource]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Idle equipment items
+
+  /webhooks/{event}:
+    post:
+      summary: Inbound webhook receiver
+      tags: [Webhooks]
+      security: []
+      parameters:
+        - name: event
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - task-completed
+              - material-received
+              - labor-hours-logged
+              - equipment-usage-logged
+              - safety-incident
+              - field-issue-logged
+              - schedule-change-requested
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+        '400':
+          description: Unknown event or processing failure
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        orgId: { type: string }
+        status: { type: string }
+        structureType: { type: string }
+        structureLocked: { type: boolean }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ScheduleActivity:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        name: { type: string }
+        description: { type: string }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        duration: { type: integer }
+        percentComplete: { type: number }
+        status: { type: string }
+        isMilestone: { type: boolean }
+        isCritical: { type: boolean }
+        totalFloat: { type: number }
+        freeFloat: { type: number }
+
+    ScheduleActivityInput:
+      type: object
+      required: [name, startDate, endDate, duration]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        wbsItemId: { type: string }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        duration: { type: integer }
+        percentComplete: { type: number }
+        status: { type: string }
+        isMilestone: { type: boolean }
+        predecessors: { type: object }
+        successors: { type: object }
+
+    BudgetLine:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        name: { type: string }
+        budgetAmount: { type: number }
+        committedAmount: { type: number }
+        incurredAmount: { type: number }
+        percentComplete: { type: number }
+        varianceFlag: { type: string }
+
+    EvmResult:
+      type: object
+      properties:
+        projectId: { type: string }
+        totalBudget: { type: number }
+        totalBcwp: { type: number }
+        totalAcwp: { type: number }
+        evm:
+          type: object
+          properties:
+            bcws: { type: number }
+            bcwp: { type: number }
+            acwp: { type: number }
+            sv: { type: number }
+            cv: { type: number }
+            spi: { type: number }
+            cpi: { type: number }
+            eac: { type: number }
+            vac: { type: number }
+            tcpi: { type: number }
+        lineResults:
+          type: array
+          items:
+            type: object
+
+    MorningDashboard:
+      type: object
+      properties:
+        projectId: { type: string }
+        generatedAt: { type: string, format: date-time }
+        tiles:
+          type: object
+          properties:
+            safety:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                summary: { type: string }
+                count: { type: integer }
+            schedule:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                summary: { type: string }
+                count: { type: integer }
+            cost:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                summary: { type: string }
+                count: { type: integer }
+            materials:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                summary: { type: string }
+                count: { type: integer }
+            clientIssues:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                summary: { type: string }
+                count: { type: integer }
+            fieldIssues:
+              type: object
+              properties:
+                name: { type: string }
+                status: { type: string }
+                summary: { type: string }
+                count: { type: integer }
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }

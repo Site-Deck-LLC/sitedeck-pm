@@ -1,0 +1,450 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id                        String   @id @default(cuid())
+  name                      String
+  status                    String   @default("active")
+  orgId                     String   @map("org_id")
+  structureType             String   @map("structure_type")
+  structureLocked           Boolean  @default(false) @map("structure_locked")
+  startDate                 DateTime? @map("start_date")
+  endDate                   DateTime? @map("end_date")
+  activeMilestones          Json?    @map("active_milestones")
+  superintendentAssignments Json?    @map("superintendent_assignments")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  workBreakdownItems WorkBreakdownItem[]
+  scheduleActivities ScheduleActivity[]
+  scheduleBaselines ScheduleBaseline[]
+  scheduleChangeRequests ScheduleChangeRequest[]
+  budgetLines BudgetLine[]
+  costTransactions CostTransaction[]
+  purchaseOrders PurchaseOrder[]
+  materialDeliveries MaterialDelivery[]
+  invoices Invoice[]
+  subcontracts Subcontract[]
+  scopeStatements ScopeStatement[]
+  changeOrders ChangeOrder[]
+  rfis Rfi[]
+  submittals Submittal[]
+  riskItems RiskItem[]
+  issues Issue[]
+  voiceMemos VoiceMemo[]
+  unifiedChangeLogs UnifiedChangeLog[]
+  closeoutChecklists CloseoutChecklist[]
+  equipment Equipment[]
+
+  @@map("projects")
+}
+
+model WorkBreakdownItem {
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  project       Project  @relation(fields: [projectId], references: [id])
+  structureType String   @map("structure_type")
+  code          String
+  name          String
+  parentId      String?  @map("parent_id")
+  level         Int      @default(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("work_breakdown_items")
+}
+
+model WbsCostCodeCrosswalk {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  gcItemId  String   @map("gc_item_id")
+  subItemId String   @map("sub_item_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("wbs_cost_code_crosswalk")
+}
+
+model ScheduleActivity {
+  id               String   @id @default(cuid())
+  projectId        String   @map("project_id")
+  project          Project  @relation(fields: [projectId], references: [id])
+  name             String
+  description      String?
+  wbsItemId        String?  @map("wbs_item_id")
+  startDate        DateTime @map("start_date")
+  endDate          DateTime @map("end_date")
+  duration         Int // in working days
+  percentComplete  Float    @default(0) @map("percent_complete")
+  status           String   @default("not_started") // not_started, in_progress, complete, delayed
+  isMilestone      Boolean  @default(false) @map("is_milestone")
+  isCritical       Boolean  @default(false) @map("is_critical")
+  totalFloat       Float?   @map("total_float") // in days
+  freeFloat        Float?   @map("free_float") // in days
+  earlyStart       DateTime? @map("early_start")
+  earlyFinish      DateTime? @map("early_finish")
+  lateStart        DateTime? @map("late_start")
+  lateFinish       DateTime? @map("late_finish")
+  predecessors     Json? // array of {activityId, type (FS|SS|FF|SF), lag (days)}
+  successors       Json? // array of {activityId, type, lag}
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("schedule_activities")
+}
+
+model ScheduleBaseline {
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  project       Project  @relation(fields: [projectId], references: [id])
+  name          String
+  locked        Boolean  @default(false)
+  baselineDate  DateTime @map("baseline_date")
+  activities    Json // snapshot of all activities at baseline time (array of activity objects)
+  createdBy     String   @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("schedule_baselines")
+}
+
+model ScheduleChangeRequest {
+  id                   String   @id @default(cuid())
+  projectId            String   @map("project_id")
+  project              Project  @relation(fields: [projectId], references: [id])
+  activityId           String   @map("activity_id")
+  requestedBy          String   @map("requested_by")
+  reasonCode           String   @map("reason_code")
+  proposedStart        DateTime? @map("proposed_start")
+  proposedEnd          DateTime? @map("proposed_end")
+  impactDescription    String?  @map("impact_description")
+  criticalPathImpact   Float?   @map("critical_path_impact") // in days
+  status               String   @default("pending") // pending, approved, modified, rejected
+  decisionNotes        String?  @map("decision_notes")
+  decidedBy            String?  @map("decided_by")
+  decidedAt            DateTime? @map("decided_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("schedule_change_requests")
+}
+
+model WebhooksLog {
+  id         String   @id @default(cuid())
+  event      String
+  direction  String // inbound | outbound
+  payload    Json
+  status     String   @default("pending")
+  retryCount Int      @default(0) @map("retry_count")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("webhooks_log")
+}
+
+model BudgetLine {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id])
+  wbsItemId         String?  @map("wbs_item_id")
+  costCode          String?  @map("cost_code")
+  name              String
+  budgetAmount      Decimal  @map("budget_amount") @db.Decimal(15, 2)
+  committedAmount   Decimal  @default(0) @map("committed_amount") @db.Decimal(15, 2)
+  incurredAmount    Decimal  @default(0) @map("incurred_amount") @db.Decimal(15, 2)
+  forecastAmount    Decimal? @map("forecast_amount") @db.Decimal(15, 2)
+  percentComplete   Float    @default(0) @map("percent_complete")
+  varianceThreshold Float?   @map("variance_threshold")
+  varianceFlag      String?  @map("variance_flag")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  costTransactions CostTransaction[]
+
+  @@map("budget_lines")
+}
+
+model CostTransaction {
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  project         Project  @relation(fields: [projectId], references: [id])
+  budgetLineId    String   @map("budget_line_id")
+  budgetLine      BudgetLine @relation(fields: [budgetLineId], references: [id])
+  type            String
+  source          String
+  amount          Decimal  @db.Decimal(15, 2)
+  description     String?
+  transactionDate DateTime @map("transaction_date")
+  referenceId     String?  @map("reference_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("cost_transactions")
+}
+
+model PurchaseOrder {
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  project       Project  @relation(fields: [projectId], references: [id])
+  poNumber      String   @map("po_number")
+  vendorName    String   @map("vendor_name")
+  status        String   @default("draft")
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(15, 2)
+  wbsItemId     String?  @map("wbs_item_id")
+  activityId    String?  @map("activity_id")
+  createdBy     String   @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  lineItems     PurchaseOrderLineItem[]
+  deliveries    MaterialDelivery[]
+  invoices      Invoice[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLineItem {
+  id                String   @id @default(cuid())
+  poId              String   @map("po_id")
+  purchaseOrder     PurchaseOrder @relation(fields: [poId], references: [id])
+  materialName      String   @map("material_name")
+  quantity          Decimal  @db.Decimal(12, 4)
+  unit              String
+  unitPrice         Decimal  @map("unit_price") @db.Decimal(15, 4)
+  lineTotal         Decimal  @map("line_total") @db.Decimal(15, 2)
+  quantityReceived  Decimal  @default(0) @map("quantity_received") @db.Decimal(12, 4)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  deliveries        MaterialDelivery[]
+
+  @@map("po_line_items")
+}
+
+model MaterialDelivery {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id])
+  poId              String   @map("po_id")
+  purchaseOrder     PurchaseOrder @relation(fields: [poId], references: [id])
+  lineItemId        String   @map("line_item_id")
+  lineItem          PurchaseOrderLineItem @relation(fields: [lineItemId], references: [id])
+  quantityReceived  Decimal  @map("quantity_received") @db.Decimal(12, 4)
+  receivedBy        String   @map("received_by")
+  receivedAt        DateTime @map("received_at")
+  discrepancies     String?
+  deliveryReference String?  @map("delivery_reference")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("material_deliveries")
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  project       Project  @relation(fields: [projectId], references: [id])
+  poId          String   @map("po_id")
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id])
+  invoiceNumber String   @map("invoice_number")
+  invoiceAmount Decimal  @map("invoice_amount") @db.Decimal(15, 2)
+  status        String   @default("pending")
+  matchStatus   String?  @map("match_status")
+  matchNotes    String?  @map("match_notes")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("invoices")
+}
+
+model Subcontract {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id])
+  subcontractorName String   @map("subcontractor_name")
+  contractAmount    Decimal  @map("contract_amount") @db.Decimal(15, 2)
+  scheduleOfValues  Json?    @map("schedule_of_values")
+  retentionPercent  Float    @default(0.1) @map("retention_percent")
+  status            String   @default("active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("subcontracts")
+}
+
+model ScopeStatement {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id])
+  content   String
+  version   Int      @default(1)
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("scope_statements")
+}
+
+model ChangeOrder {
+  id                  String    @id @default(cuid())
+  projectId           String    @map("project_id")
+  project             Project   @relation(fields: [projectId], references: [id])
+  coNumber            String    @map("co_number")
+  date                DateTime
+  description         String
+  status              String    @default("pending")
+  dollarValue         Decimal?  @map("dollar_value") @db.Decimal(15, 2)
+  scheduleImpact      Float?    @map("schedule_impact")
+  approver            String?
+  approvedAt          DateTime? @map("approved_at")
+  affectedActivityIds Json?     @map("affected_activity_ids")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@map("change_orders")
+}
+
+model Rfi {
+  id               String    @id @default(cuid())
+  projectId        String    @map("project_id")
+  project          Project   @relation(fields: [projectId], references: [id])
+  rfiNumber        String    @map("rfi_number")
+  subject          String
+  description      String
+  status           String    @default("draft")
+  submittedBy      String    @map("submitted_by")
+  submittedAt      DateTime? @map("submitted_at")
+  assignedTo       String?   @map("assigned_to")
+  responseText     String?   @map("response_text")
+  answeredAt       DateTime? @map("answered_at")
+  holdOnActivityId String?   @map("hold_on_activity_id")
+  sourceReference  String?   @map("source_reference")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("rfis")
+}
+
+model Submittal {
+  id               String    @id @default(cuid())
+  projectId        String    @map("project_id")
+  project          Project   @relation(fields: [projectId], references: [id])
+  submittalNumber  String    @map("submittal_number")
+  title            String
+  description      String?
+  status           String    @default("pending")
+  specSection      String?   @map("spec_section")
+  submittedBy      String    @map("submitted_by")
+  submittedAt      DateTime? @map("submitted_at")
+  reviewedBy       String?   @map("reviewed_by")
+  reviewedAt       DateTime? @map("reviewed_at")
+  holdOnActivityId String?   @map("hold_on_activity_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("submittals")
+}
+
+model RiskItem {
+  id                  String   @id @default(cuid())
+  projectId           String   @map("project_id")
+  project             Project  @relation(fields: [projectId], references: [id])
+  description         String
+  category            String
+  probability         String
+  impact              String
+  score               Int
+  mitigationPlan      String?  @map("mitigation_plan")
+  owner               String
+  status              String   @default("open")
+  linkedActivityId    String?  @map("linked_activity_id")
+  linkedBudgetLineId  String?  @map("linked_budget_line_id")
+  source              String   @default("manual")
+  incidentReference   String?  @map("incident_reference")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("risk_items")
+}
+
+model Issue {
+  id            String    @id @default(cuid())
+  projectId     String    @map("project_id")
+  project       Project   @relation(fields: [projectId], references: [id])
+  issueNumber   String    @map("issue_number")
+  type          String
+  source        String
+  title         String
+  description   String
+  status        String    @default("open")
+  priority      String    @default("medium")
+  activityId    String?   @map("activity_id")
+  assignee      String?
+  dueDate       DateTime? @map("due_date")
+  resolvedAt    DateTime? @map("resolved_at")
+  createdBy     String    @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("issues")
+}
+
+model VoiceMemo {
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  project         Project  @relation(fields: [projectId], references: [id])
+  audioUrl        String   @map("audio_url")
+  transcription   String
+  structuredData  Json?    @map("structured_data")
+  status          String   @default("pending")
+  createdBy       String   @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("voice_memos")
+}
+
+model UnifiedChangeLog {
+  id                 String   @id @default(cuid())
+  projectId          String   @map("project_id")
+  project            Project  @relation(fields: [projectId], references: [id])
+  module             String
+  changeType         String   @map("change_type")
+  description        String
+  affectedRecordId   String?  @map("affected_record_id")
+  affectedRecordType String?  @map("affected_record_type")
+  changedBy          String   @map("changed_by")
+  changedAt          DateTime @map("changed_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@map("unified_change_log")
+}
+
+model CloseoutChecklist {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id])
+  items     Json
+  status    String   @default("in_progress")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("closeout_checklists")
+}
+
+model Equipment {
+  id                String    @id @default(cuid())
+  projectId         String    @map("project_id")
+  project           Project   @relation(fields: [projectId], references: [id])
+  externalId        String    @map("external_id")
+  name              String
+  type              String?
+  status            String    @default("active")
+  currentActivityId String?   @map("current_activity_id")
+  lastUsageDate     DateTime? @map("last_usage_date")
+  totalHours        Float     @default(0) @map("total_hours")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@unique([projectId, externalId])
+  @@map("equipment")
+}

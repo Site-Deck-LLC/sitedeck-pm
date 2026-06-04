@@ -1,0 +1,1 @@
+{"version":3,"file":"evm.d.ts","sourceRoot":"","sources":["../../src/constants/evm.ts"],"names":[],"mappings":"AAAA,eAAO,MAAM,cAAc;;;;;CAKjB,CAAC;AAEX,eAAO,MAAM,WAAW;;;;;;;;;;;CAWd,CAAC;AAEX,MAAM,MAAM,SAAS,GAAG,CAAC,OAAO,WAAW,CAAC,CAAC,MAAM,OAAO,WAAW,CAAC,CAAC;AAEvE,wBAAgB,iBAAiB,CAC/B,MAAM,EAAE,KAAK,GAAG,KAAK,EACrB,KAAK,EAAE,MAAM,GACZ,OAAO,GAAG,OAAO,GAAG,KAAK,CAc3B"}

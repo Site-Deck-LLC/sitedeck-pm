@@ -1,0 +1,35 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const health_routes_1 = __importDefault(require("./health.routes"));
+const project_routes_1 = __importDefault(require("./project.routes"));
+const schedule_routes_1 = __importDefault(require("./schedule.routes"));
+const cost_routes_1 = __importDefault(require("./cost.routes"));
+const dashboard_routes_1 = __importDefault(require("./dashboard.routes"));
+const procurement_routes_1 = __importDefault(require("./procurement.routes"));
+const scope_routes_1 = __importDefault(require("./scope.routes"));
+const communications_routes_1 = __importDefault(require("./communications.routes"));
+const risk_routes_1 = __importDefault(require("./risk.routes"));
+const integration_routes_1 = __importDefault(require("./integration.routes"));
+const owners_rep_routes_1 = __importDefault(require("./owners-rep.routes"));
+const resource_routes_1 = __importDefault(require("./resource.routes"));
+const webhook_routes_1 = __importDefault(require("./webhook.routes"));
+const router = (0, express_1.Router)();
+router.use('/health', health_routes_1.default);
+router.use('/projects', project_routes_1.default);
+router.use('/projects/:projectId/schedule', schedule_routes_1.default);
+router.use('/projects/:projectId/cost', cost_routes_1.default);
+router.use('/projects/:projectId/dashboard', dashboard_routes_1.default);
+router.use('/projects/:projectId/procurement', procurement_routes_1.default);
+router.use('/projects/:projectId/scope', scope_routes_1.default);
+router.use('/projects/:projectId/communications', communications_routes_1.default);
+router.use('/projects/:projectId/risk', risk_routes_1.default);
+router.use('/projects/:projectId/integration', integration_routes_1.default);
+router.use('/projects/:projectId/owners-rep', owners_rep_routes_1.default);
+router.use('/projects/:projectId/resource', resource_routes_1.default);
+router.use('/webhooks', webhook_routes_1.default);
+exports.default = router;
+//# sourceMappingURL=index.js.map
