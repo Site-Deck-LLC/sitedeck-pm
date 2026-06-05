@@ -75,7 +75,7 @@ export default function App() {
         projectId={projectId}
         onBack={() => window.history.back()}
         onLogout={() => { setToken(null); setState({ view: 'projects', projectId: null, tileKey: null }); }}
-        onSelectTile={(key) => push({ view: 'dashboard-detail', projectId, tileKey: key })}
+        onSelectTile={(key) => push({ view: key === 'schedule' ? 'gantt' : 'dashboard-detail', projectId, tileKey: key })}
       />
     );
   }

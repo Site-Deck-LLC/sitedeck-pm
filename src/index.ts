@@ -10,7 +10,7 @@ export function createApp(): Application {
 
   // Serve React frontend build if it exists
   const frontendDist = path.join(__dirname, '../frontend/dist');
-  app.use(express.static(frontendDist));
+  app.use(express.static(frontendDist, { maxAge: 0, etag: false, lastModified: false }));
 
   app.use('/api/v1', apiRoutes);
 
