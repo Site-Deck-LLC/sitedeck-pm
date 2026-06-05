@@ -119,82 +119,85 @@ export function DashboardDetail({
           <>
             {/* Cost Gauges */}
             {tileKey === 'cost' && evm && (
-          <div style={gaugesContainerStyle}>
-            <div style={gaugeCardStyle}>
-              <Gauge value={evm.cpi} label="Cost Performance Index (CPI)" size={160} />
-              <div style={gaugeLegendStyle}>
-                <div style={legendItemStyle}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.green }} />
-                  <span style={legendTextStyle}>≥1.0 On Budget</span>
+              <div style={gaugesContainerStyle}>
+                <div style={gaugeCardStyle}>
+                  <Gauge value={evm.cpi} label="Cost Performance Index (CPI)" size={160} />
+                  <div style={gaugeLegendStyle}>
+                    <div style={legendItemStyle}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.green }} />
+                      <span style={legendTextStyle}>≥1.0 On Budget</span>
+                    </div>
+                    <div style={legendItemStyle}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.amber }} />
+                      <span style={legendTextStyle}>0.95–1.0 Warning</span>
+                    </div>
+                    <div style={legendItemStyle}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.red }} />
+                      <span style={legendTextStyle}>{'<0.95 Overrun'}</span>
+                    </div>
+                  </div>
                 </div>
-                <div style={legendItemStyle}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.amber }} />
-                  <span style={legendTextStyle}>0.95–1.0 Warning</span>
+                <div style={gaugeCardStyle}>
+                  <Gauge value={evm.spi} label="Schedule Performance Index (SPI)" size={160} />
                 </div>
-                <div style={legendItemStyle}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.red }} />
-                  <span style={legendTextStyle}>{'<0.95 Overrun'}</span>
+                <div style={gaugeCardStyle}>
+                  <div style={evmSummaryStyle}>
+                    <div style={evmRowStyle}>
+                      <span style={evmLabelStyle}>Earned Value</span>
+                      <span style={evmValueStyle}>${(evm.ev / 1000000).toFixed(2)}M</span>
+                    </div>
+                    <div style={evmRowStyle}>
+                      <span style={evmLabelStyle}>Budget</span>
+                      <span style={evmValueStyle}>${(evm.totalBudget / 1000000).toFixed(2)}M</span>
+                    </div>
+                    <div style={evmRowStyle}>
+                      <span style={evmLabelStyle}>Incurred</span>
+                      <span style={evmValueStyle}>${(evm.totalIncurred / 1000000).toFixed(2)}M</span>
+                    </div>
+                    <div style={evmRowStyle}>
+                      <span style={evmLabelStyle}>Committed</span>
+                      <span style={evmValueStyle}>${(evm.totalCommitted / 1000000).toFixed(2)}M</span>
+                    </div>
+                    <div style={{ ...evmRowStyle, borderTop: `2px solid ${COLORS.gray200}`, paddingTop: 12, marginTop: 8 }}>
+                      <span style={evmLabelStyle}>Overall % Complete</span>
+                      <span style={{ ...evmValueStyle, color: COLORS.orange }}>{(evm.totalPct * 100).toFixed(1)}%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div style={gaugeCardStyle}>
-              <Gauge value={evm.spi} label="Schedule Performance Index (SPI)" size={160} />
-            </div>
-            <div style={gaugeCardStyle}>
-              <div style={evmSummaryStyle}>
-                <div style={evmRowStyle}>
-                  <span style={evmLabelStyle}>Earned Value</span>
-                  <span style={evmValueStyle}>${(evm.ev / 1000000).toFixed(2)}M</span>
-                </div>
-                <div style={evmRowStyle}>
-                  <span style={evmLabelStyle}>Budget</span>
-                  <span style={evmValueStyle}>${(evm.totalBudget / 1000000).toFixed(2)}M</span>
-                </div>
-                <div style={evmRowStyle}>
-                  <span style={evmLabelStyle}>Incurred</span>
-                  <span style={evmValueStyle}>${(evm.totalIncurred / 1000000).toFixed(2)}M</span>
-                </div>
-                <div style={evmRowStyle}>
-                  <span style={evmLabelStyle}>Committed</span>
-                  <span style={evmValueStyle}>${(evm.totalCommitted / 1000000).toFixed(2)}M</span>
-                </div>
-                <div style={{ ...evmRowStyle, borderTop: `2px solid ${COLORS.gray200}`, paddingTop: 12, marginTop: 8 }}>
-                  <span style={evmLabelStyle}>Overall % Complete</span>
-                  <span style={{ ...evmValueStyle, color: COLORS.orange }}>{(evm.totalPct * 100).toFixed(1)}%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Data Table */}
-        <div style={tableCardStyle}>
-          <div style={tableHeaderStyle}>
-            <h2 style={tableTitleStyle}>{items.length} Records</h2>
-          </div>
-
-          {items.length === 0 && (
-            <div style={{ padding: '40px 0', textAlign: 'center', color: COLORS.textMuted, fontFamily: FONTS.family }}>
-              No items found.
-            </div>
-          )}
-
-          {items.map((item, i) => (
-            <div key={item.id || i} style={rowStyle}>
-              <div style={rowHeaderStyle}>
-                <span style={rowNameStyle}>
-                  {item.name || item.title || item.subject || item.description?.slice(0, 50) || `Record ${i + 1}`}
-                </span>
-                {'status' in item && (
-                  <span style={statusBadgeStyle(item.status)}>{item.status}</span>
-                )}
+            {/* Data Table */}
+            <div style={tableCardStyle}>
+              <div style={tableHeaderStyle}>
+                <h2 style={tableTitleStyle}>{items.length} Records</h2>
               </div>
-              <div style={rowDetailsStyle}>
-                {renderFields(item, tileKey)}
-              </div>
+
+              {items.length === 0 && (
+                <div style={{ padding: '40px 0', textAlign: 'center', color: COLORS.textMuted, fontFamily: FONTS.family }}>
+                  No items found.
+                </div>
+              )}
+
+              {items.map((item, i) => {
+                const rowBorder = getFlagBorder(item, tileKey);
+                return (
+                  <div key={item.id || i} style={{ ...rowStyle, ...rowBorder }}>
+                    <div style={rowHeaderStyle}>
+                      <span style={rowNameStyle}>
+                        {item.name || item.title || item.subject || item.description?.slice(0, 50) || `Record ${i + 1}`}
+                      </span>
+                      {'status' in item && (
+                        <span style={statusBadgeStyle(item.status)}>{item.status}</span>
+                      )}
+                    </div>
+                    <div style={rowDetailsStyle}>
+                      {renderFields(item, tileKey)}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
           </>
         )}
       </div>
@@ -219,7 +222,7 @@ function renderFields(item: any, tileKey: string) {
       { label: 'Incurred', value: `$${Number(item.incurredAmount || 0).toLocaleString()}` },
       { label: 'Committed', value: `$${Number(item.committedAmount || 0).toLocaleString()}` },
       { label: '% Complete', value: `${Math.round((item.percentComplete || 0) * 100)}%` },
-      { label: 'Flag', value: item.varianceFlag || '—' },
+      { label: 'Flag', value: item.varianceFlag ? <FlagBadge flag={item.varianceFlag} /> : <span style={{ color: COLORS.textMuted }}>—</span> },
     );
   } else if (tileKey === 'materials') {
     fields.push(
@@ -260,6 +263,53 @@ function renderFields(item: any, tileKey: string) {
         </div>
       ))}
     </div>
+  );
+}
+
+function flagColor(flag: string): string {
+  const map: Record<string, string> = {
+    green: '#22C55E',
+    amber: '#F59E0B',
+    red: '#EF4444',
+  };
+  return map[flag] || COLORS.gray400;
+}
+
+function flagBgColor(flag: string): string {
+  const map: Record<string, string> = {
+    green: '#DCFCE7',
+    amber: '#FEF3C7',
+    red: '#FEE2E2',
+  };
+  return map[flag] || COLORS.gray100;
+}
+
+function getFlagBorder(item: any, tileKey: string): React.CSSProperties {
+  if (tileKey !== 'cost') return {};
+  const color = item.varianceFlag ? flagColor(item.varianceFlag) : null;
+  if (!color) return {};
+  return { borderLeft: `4px solid ${color}` };
+}
+
+function FlagBadge({ flag }: { flag: string }) {
+  const color = flagColor(flag);
+  const bg = flagBgColor(flag);
+  const label = flag.charAt(0).toUpperCase() + flag.slice(1);
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '3px 10px',
+      borderRadius: '20px',
+      fontSize: FONTS.size.xs,
+      fontWeight: FONTS.weight.semibold,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      background: bg,
+      color,
+      border: `1px solid ${color}`,
+    }}>
+      {label}
+    </span>
   );
 }
 
