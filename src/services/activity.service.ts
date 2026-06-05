@@ -69,6 +69,74 @@ export async function getActivitiesByProject(projectId: string) {
   });
 }
 
+export interface EnrichedActivity {
+  id: string;
+  name: string;
+  description: string | null;
+  startDate: Date;
+  endDate: Date;
+  duration: number;
+  percentComplete: number;
+  status: string;
+  isMilestone: boolean;
+  isCritical: boolean;
+  wbsItemId: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+  wbsCategory: string | null;
+  totalFloat: number | null;
+  freeFloat: number | null;
+}
+
+export async function getActivitiesWithWbs(projectId: string): Promise<EnrichedActivity[]> {
+  const prisma = getPrismaClient();
+  const activities = await prisma.scheduleActivity.findMany({
+    where: { projectId },
+    orderBy: { startDate: 'asc' },
+  });
+
+  const wbsItemIds = [...new Set(activities.map(a => a.wbsItemId).filter(Boolean))];
+  const wbsItems = wbsItemIds.length
+    ? await prisma.workBreakdownItem.findMany({
+        where: { id: { in: wbsItemIds as string[] } },
+      })
+    : [];
+
+  const wbsMap = new Map(wbsItems.map(w => [w.id, w]));
+
+  // Fetch level-1 parents for category names
+  const parentIds = [...new Set(wbsItems.map(w => w.parentId).filter(Boolean))];
+  const parents = parentIds.length
+    ? await prisma.workBreakdownItem.findMany({
+        where: { id: { in: parentIds as string[] } },
+      })
+    : [];
+  const parentMap = new Map(parents.map(p => [p.id, p]));
+
+  return activities.map(a => {
+    const wbs = a.wbsItemId ? wbsMap.get(a.wbsItemId) : null;
+    const parent = wbs?.parentId ? parentMap.get(wbs.parentId) : null;
+    return {
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      startDate: a.startDate,
+      endDate: a.endDate,
+      duration: a.duration,
+      percentComplete: a.percentComplete,
+      status: a.status,
+      isMilestone: a.isMilestone,
+      isCritical: a.isCritical,
+      wbsItemId: a.wbsItemId,
+      wbsCode: wbs?.code || null,
+      wbsName: wbs?.name || null,
+      wbsCategory: parent?.name || wbs?.name || 'Uncategorized',
+      totalFloat: a.totalFloat,
+      freeFloat: a.freeFloat,
+    };
+  });
+}
+
 export async function updateActivity(id: string, data: UpdateActivityInput) {
   const prisma = getPrismaClient();
   const existing = await prisma.scheduleActivity.findUnique({
@@ -120,8 +188,6 @@ export async function markActivityReady(id: string) {
   if (!existing) {
     throw new Error('Activity not found');
   }
-  // For V1, set status to not_started as the "ready" trigger point.
-  // The activity.ready outbound webhook would fire here in a full implementation.
   const activity = await prisma.scheduleActivity.update({
     where: { id },
     data: { status: ACTIVITY_STATUSES.NOT_STARTED },
@@ -131,7 +197,7 @@ export async function markActivityReady(id: string) {
 
 export async function markActivityComplete(
   id: string,
-  completedBy: string,
+  _completedBy: string,
   completedAt: Date
 ) {
   const prisma = getPrismaClient();

@@ -14,7 +14,7 @@ router.get(
   requireAuth,
   requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPERINTENDENT, ROLES.SUBCONTRACTOR_PM, ROLES.OWNERS_REP),
   asyncHandler(async (req, res) => {
-    const result = await activityService.getActivitiesByProject(req.params.projectId);
+    const result = await activityService.getActivitiesWithWbs(req.params.projectId);
     res.json(result);
   })
 );

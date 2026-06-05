@@ -42,7 +42,7 @@ const baselineService = __importStar(require("../services/baseline.service"));
 const changeRequestService = __importStar(require("../services/change-request.service"));
 const router = (0, express_1.Router)({ mergeParams: true });
 router.get('/activities', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.SUBCONTRACTOR_PM, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (req, res) => {
-    const result = await activityService.getActivitiesByProject(req.params.projectId);
+    const result = await activityService.getActivitiesWithWbs(req.params.projectId);
     res.json(result);
 }));
 router.post('/activities', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER), (0, async_handler_1.asyncHandler)(async (req, res) => {

@@ -98,6 +98,25 @@ export declare function getActivitiesByProject(projectId: string): Promise<{
     predecessors: Prisma.JsonValue | null;
     successors: Prisma.JsonValue | null;
 }[]>;
+export interface EnrichedActivity {
+    id: string;
+    name: string;
+    description: string | null;
+    startDate: Date;
+    endDate: Date;
+    duration: number;
+    percentComplete: number;
+    status: string;
+    isMilestone: boolean;
+    isCritical: boolean;
+    wbsItemId: string | null;
+    wbsCode: string | null;
+    wbsName: string | null;
+    wbsCategory: string | null;
+    totalFloat: number | null;
+    freeFloat: number | null;
+}
+export declare function getActivitiesWithWbs(projectId: string): Promise<EnrichedActivity[]>;
 export declare function updateActivity(id: string, data: UpdateActivityInput): Promise<{
     id: string;
     name: string;
@@ -170,7 +189,7 @@ export declare function markActivityReady(id: string): Promise<{
     predecessors: Prisma.JsonValue | null;
     successors: Prisma.JsonValue | null;
 }>;
-export declare function markActivityComplete(id: string, completedBy: string, completedAt: Date): Promise<{
+export declare function markActivityComplete(id: string, _completedBy: string, completedAt: Date): Promise<{
     id: string;
     name: string;
     status: string;

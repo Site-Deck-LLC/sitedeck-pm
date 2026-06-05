@@ -70,6 +70,10 @@ export function getScheduleActivities(projectId: string) {
   return fetchApi(`/api/v1/projects/${projectId}/schedule/activities`);
 }
 
+export function getScheduleBaselines(projectId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/schedule/baselines`);
+}
+
 // ── Cost ──
 export function getBudgetLines(projectId: string) {
   return fetchApi(`/api/v1/projects/${projectId}/cost/budget-lines`);
