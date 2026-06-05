@@ -27,6 +27,44 @@ const titles: Record<string, string> = {
   safety: 'Safety & Equipment',
 };
 
+// ── Priority color system ──
+const PRIORITY_COLORS: Record<string, { border: string; bg: string; text: string }> = {
+  critical: { border: '#EF4444', bg: '#FEE2E2', text: '#EF4444' },
+  high:     { border: '#E8720C', bg: '#FFF7ED', text: '#E8720C' },
+  medium:   { border: '#F59E0B', bg: '#FEF3C7', text: '#B45309' },
+  low:      { border: '#C4C8D0', bg: '#F0F1F3', text: '#5A6072' },
+};
+
+// ── Issue status badge colors (override generic) ──
+const ISSUE_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  open:         { bg: '#EF4444', text: '#FFFFFF' },
+  resolved:     { bg: '#22C55E', text: '#FFFFFF' },
+  in_progress:  { bg: '#E8720C', text: '#FFFFFF' },
+};
+
+// ── Sort issues: Critical open → High open → Medium → Resolved last ──
+const PRIORITY_RANK: Record<string, number> = {
+  critical: 1,
+  high:     2,
+  medium:   3,
+  low:      4,
+};
+
+const STATUS_RANK: Record<string, number> = {
+  open:        1,
+  in_progress: 2,
+  resolved:    99,
+};
+
+function sortIssues(items: any[]): any[] {
+  return [...items].sort((a, b) => {
+    const sa = STATUS_RANK[a.status] ?? 50;
+    const sb = STATUS_RANK[b.status] ?? 50;
+    if (sa !== sb) return sa - sb;
+    return (PRIORITY_RANK[a.priority] ?? 99) - (PRIORITY_RANK[b.priority] ?? 99);
+  });
+}
+
 // Calculate mock CPI and SPI from budget data
 function calculateEvm(data: any[]) {
   const totalBudget = data.reduce((sum, b) => sum + Number(b.budgetAmount || 0), 0);
@@ -60,7 +98,12 @@ export function DashboardDetail({
       try {
         const loader = loaders[tileKey] || getEquipment;
         const data = await loader(projectId);
-        setItems(Array.isArray(data) ? data : data?.items || data?.data || []);
+        let raw = Array.isArray(data) ? data : data?.items || data?.data || [];
+
+        if (tileKey === 'fieldIssues' || tileKey === 'clientIssues') {
+          raw = sortIssues(raw);
+        }
+        setItems(raw);
 
         if (tileKey === 'cost') {
           setEvm(calculateEvm(data));
@@ -73,6 +116,8 @@ export function DashboardDetail({
     }
     load();
   }, [projectId, tileKey]);
+
+  const isIssues = tileKey === 'fieldIssues' || tileKey === 'clientIssues';
 
   return (
     <div style={pageStyle}>
@@ -167,7 +212,7 @@ export function DashboardDetail({
               </div>
             )}
 
-            {/* Data Table */}
+            {/* Data Table / Cards */}
             <div style={tableCardStyle}>
               <div style={tableHeaderStyle}>
                 <h2 style={tableTitleStyle}>{items.length} Records</h2>
@@ -180,7 +225,10 @@ export function DashboardDetail({
               )}
 
               {items.map((item, i) => {
-                const rowBorder = getFlagBorder(item, tileKey);
+                const rowBorder = isIssues
+                  ? getIssueBorder(item)
+                  : getFlagBorder(item, tileKey);
+
                 return (
                   <div key={item.id || i} style={{ ...rowStyle, ...rowBorder }}>
                     <div style={rowHeaderStyle}>
@@ -188,7 +236,9 @@ export function DashboardDetail({
                         {item.name || item.title || item.subject || item.description?.slice(0, 50) || `Record ${i + 1}`}
                       </span>
                       {'status' in item && (
-                        <span style={statusBadgeStyle(item.status)}>{item.status}</span>
+                        <span style={isIssues ? issueStatusBadgeStyle(item.status) : statusBadgeStyle(item.status)}>
+                          {item.status}
+                        </span>
                       )}
                     </div>
                     <div style={rowDetailsStyle}>
@@ -232,10 +282,30 @@ function renderFields(item: any, tileKey: string) {
       { label: 'Match', value: item.matchStatus || 'pending' },
     );
   } else if (tileKey === 'clientIssues' || tileKey === 'fieldIssues') {
+    const overdue = getDaysOverdue(item.dueDate);
     fields.push(
-      { label: 'Priority', value: item.priority },
+      { label: 'Priority', value: <PriorityBadge priority={item.priority} /> },
       { label: 'Assignee', value: item.assignee || '—' },
-      { label: 'Due', value: item.dueDate?.slice(0, 10) || '—' },
+      {
+        label: 'Due',
+        value: (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{item.dueDate?.slice(0, 10) || '—'}</span>
+            {overdue > 0 && (
+              <span style={{
+                fontSize: FONTS.size.xs,
+                fontWeight: FONTS.weight.semibold,
+                color: '#EF4444',
+                background: '#FEE2E2',
+                padding: '2px 6px',
+                borderRadius: '4px',
+              }}>
+                {overdue} day{overdue > 1 ? 's' : ''} overdue
+              </span>
+            )}
+          </span>
+        ),
+      },
       { label: 'Source', value: item.source },
     );
   } else if (tileKey === 'safety') {
@@ -264,6 +334,60 @@ function renderFields(item: any, tileKey: string) {
       ))}
     </div>
   );
+}
+
+// ── Helpers ──
+
+function getDaysOverdue(dueDate: string | null | undefined): number {
+  if (!dueDate) return 0;
+  const due = new Date(dueDate);
+  const today = new Date('2026-06-04');
+  if (due >= today) return 0;
+  const ms = today.getTime() - due.getTime();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+}
+
+function getIssueBorder(item: any): React.CSSProperties {
+  const p = (item.priority || 'low').toLowerCase();
+  const c = PRIORITY_COLORS[p] || PRIORITY_COLORS.low;
+  return { borderLeft: `4px solid ${c.border}` };
+}
+
+function PriorityBadge({ priority }: { priority: string }) {
+  const p = (priority || 'low').toLowerCase();
+  const c = PRIORITY_COLORS[p] || PRIORITY_COLORS.low;
+  const label = p.charAt(0).toUpperCase() + p.slice(1);
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '3px 10px',
+      borderRadius: '20px',
+      fontSize: FONTS.size.xs,
+      fontWeight: FONTS.weight.semibold,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      background: c.bg,
+      color: c.text,
+      border: `1px solid ${c.border}`,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function issueStatusBadgeStyle(status: string): React.CSSProperties {
+  const s = (status || '').toLowerCase();
+  const c = ISSUE_STATUS_COLORS[s] || { bg: COLORS.gray200, text: COLORS.textSecondary };
+  return {
+    padding: '3px 10px',
+    borderRadius: '12px',
+    fontSize: FONTS.size.xs,
+    fontWeight: FONTS.weight.semibold,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    background: c.bg,
+    color: c.text,
+  };
 }
 
 function flagColor(flag: string): string {
