@@ -20,11 +20,18 @@ model Project {
   endDate                   DateTime? @map("end_date")
   activeMilestones          Json?    @map("active_milestones")
   superintendentAssignments Json?    @map("superintendent_assignments")
+  contractValue             Decimal?  @map("contract_value") @db.Decimal(15, 2)
+  trirTarget                Float?    @default(1.0) @map("trir_target")
+  latitude                  Float?    @map("latitude")
+  longitude                 Float?    @map("longitude")
+  city                      String?   @map("city")
+  state                     String?   @map("state")
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
   workBreakdownItems WorkBreakdownItem[]
   scheduleActivities ScheduleActivity[]
+  activityRelationships ActivityRelationship[]
   scheduleBaselines ScheduleBaseline[]
   scheduleChangeRequests ScheduleChangeRequest[]
   budgetLines BudgetLine[]
@@ -43,8 +50,78 @@ model Project {
   unifiedChangeLogs UnifiedChangeLog[]
   closeoutChecklists CloseoutChecklist[]
   equipment Equipment[]
+  attendances Attendance[]
+  meetings Meeting[]
+  ownerReports OwnerReport[]
+  lessonsLearned LessonLearned[]
+  documents Document[]
 
   @@map("projects")
+}
+
+// Drawing / document repository. Each Document is a logical file
+// (e.g. "A-101 — First Floor Plan"); DocumentRevision is one version
+// of it. R2 is the blob store; the metadata lives here.
+model Document {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  project      Project  @relation(fields: [projectId], references: [id])
+  name         String
+  discipline   String   // "architectural" | "structural" | "mechanical" | ...
+  drawingNo    String?  @map("drawing_no")
+  // "current" | "superseded" | "void"
+  status       String   @default("current")
+  // Sprint 9: tracks the latest revision that was released as IFC.
+  currentRevisionId String?  @map("current_revision_id")
+  ifcReleasedAt     DateTime? @map("ifc_released_at")
+  ifcReleasedBy     String?   @map("ifc_released_by")
+  createdBy    String   @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  revisions DocumentRevision[]
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@map("documents")
+}
+
+model DocumentRevision {
+  id            String   @id @default(cuid())
+  documentId    String   @map("document_id")
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  revisionNo    Int      @map("revision_no")
+  // The R2 object key, e.g. "projects/p1/docs/<docId>/<revNo>-<sha>.pdf"
+  storageKey    String   @map("storage_key")
+  contentType   String   @map("content_type")
+  sizeBytes     Int      @map("size_bytes")
+  // sha256 hex digest, populated on confirm
+  sha256        String?  @map("sha256")
+  uploadedBy    String   @map("uploaded_by")
+  uploadedAt    DateTime @default(now()) @map("uploaded_at")
+  notes         String?
+  // "pending" | "uploaded" | "failed" — set by the confirm endpoint
+  uploadStatus  String   @default("pending") @map("upload_status")
+
+  @@unique([documentId, revisionNo])
+  @@index([documentId])
+  @@map("document_revisions")
+}
+
+// Audit log for document downloads. Created on every presigned-GET
+// issuance (so we know who requested access, not just who got the
+// URL — useful when the URL is shared and we need to roll a key).
+model DocumentDownloadLog {
+  id           String   @id @default(cuid())
+  documentId   String   @map("document_id")
+  revisionId   String?  @map("revision_id")
+  userId       String   @map("user_id")
+  downloadedAt DateTime @default(now()) @map("downloaded_at")
+  ipAddress    String?  @map("ip_address")
+
+  @@index([documentId])
+  @@index([userId])
+  @@map("document_download_logs")
 }
 
 model WorkBreakdownItem {
@@ -97,7 +174,28 @@ model ScheduleActivity {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
+  predecessorsRel ActivityRelationship[] @relation("ActivityPredecessors")
+  successorsRel  ActivityRelationship[] @relation("ActivitySuccessors")
+
   @@map("schedule_activities")
+}
+
+model ActivityRelationship {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id])
+  predecessorId     String   @map("predecessor_id")
+  predecessor       ScheduleActivity @relation("ActivitySuccessors", fields: [predecessorId], references: [id], onDelete: Cascade)
+  successorId       String   @map("successor_id")
+  successor         ScheduleActivity @relation("ActivityPredecessors", fields: [successorId], references: [id], onDelete: Cascade)
+  relationshipType  String   @map("relationship_type") // FS, SS, FF, SF
+  lagDays           Int      @default(0) @map("lag_days")
+  constraintType    String   @default("hard") @map("constraint_type") // hard, soft
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([predecessorId, successorId, relationshipType])
+  @@map("activity_relationships")
 }
 
 model ScheduleBaseline {
@@ -271,6 +369,8 @@ model Subcontract {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  milestones        SubcontractMilestone[]
+
   @@map("subcontracts")
 }
 
@@ -318,8 +418,11 @@ model Rfi {
   assignedTo       String?   @map("assigned_to")
   responseText     String?   @map("response_text")
   answeredAt       DateTime? @map("answered_at")
+  requiredDate     DateTime? @map("required_date")
   holdOnActivityId String?   @map("hold_on_activity_id")
   sourceReference  String?   @map("source_reference")
+  ballInCourt      String?   @map("ball_in_court")
+  statusHistory    Json?     @map("status_history")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -335,10 +438,13 @@ model Submittal {
   description      String?
   status           String    @default("pending")
   specSection      String?   @map("spec_section")
+  requiredDate     DateTime? @map("required_date")
   submittedBy      String    @map("submitted_by")
   submittedAt      DateTime? @map("submitted_at")
   reviewedBy       String?   @map("reviewed_by")
   reviewedAt       DateTime? @map("reviewed_at")
+  reviewComments   String?   @map("review_comments")
+  statusHistory    Json?     @map("status_history")
   holdOnActivityId String?   @map("hold_on_activity_id")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
@@ -362,6 +468,7 @@ model RiskItem {
   linkedBudgetLineId  String?  @map("linked_budget_line_id")
   source              String   @default("manual")
   incidentReference   String?  @map("incident_reference")
+  recordable          Boolean  @default(false)
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
@@ -383,6 +490,7 @@ model Issue {
   assignee      String?
   dueDate       DateTime? @map("due_date")
   resolvedAt    DateTime? @map("resolved_at")
+  notes         Json?     @map("notes")
   createdBy     String    @map("created_by")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
@@ -421,6 +529,24 @@ model UnifiedChangeLog {
   @@map("unified_change_log")
 }
 
+model ApiUsageLog {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  userId       String   @map("user_id")
+  endpoint     String
+  model        String
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  costUsd      Float    @default(0) @map("cost_usd")
+  success      Boolean  @default(true)
+  failureCode  String?  @map("failure_code")
+  calledAt     DateTime @map("called_at")
+
+  @@index([projectId, calledAt])
+  @@index([userId, calledAt])
+  @@map("api_usage_log")
+}
+
 model CloseoutChecklist {
   id        String   @id @default(cuid())
   projectId String   @map("project_id")
@@ -444,11 +570,52 @@ model Equipment {
   currentActivityId String?   @map("current_activity_id")
   lastUsageDate     DateTime? @map("last_usage_date")
   totalHours        Float     @default(0) @map("total_hours")
+  dailyRate         Decimal?  @map("daily_rate") @db.Decimal(15, 2)
+  isOwned           Boolean   @default(false) @map("is_owned")
+  serialNumber      String?   @map("serial_number")
+  vendor            String?
+  calDueDate        DateTime? @map("cal_due_date") @db.Date
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
+  statusLogs        EquipmentStatusLog[]
+
   @@unique([projectId, externalId])
   @@map("equipment")
+}
+
+model EquipmentStatusLog {
+  id          String    @id @default(cuid())
+  equipmentId String    @map("equipment_id")
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  status      String
+  hours       Float     @default(0)
+  notes       String?
+  loggedBy    String?   @map("logged_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([equipmentId, date])
+  @@map("equipment_status_log")
+}
+
+model Attendance {
+  id                   String   @id @default(cuid())
+  projectId            String   @map("project_id")
+  project              Project  @relation(fields: [projectId], references: [id])
+  date                 DateTime @db.Date
+  workerCount          Int      @default(0) @map("worker_count")
+  hours                Float    @default(0)
+  presentCount         Int?     @map("present_count")
+  absentCount          Int?     @map("absent_count")
+  lateCount            Int?     @map("late_count")
+  notes                String?
+  affectedActivities   String[] @default([]) @map("affected_activities")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@unique([projectId, date])
+  @@map("attendance")
 }
 
 model BillingAccount {
@@ -464,4 +631,399 @@ model BillingAccount {
   updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@map("billing_accounts")
+}
+
+// Per-org API key overrides for enterprise BYOK. The Anthropic client
+// checks this table for an org-provided key before falling back to the
+// platform key. The keyEncrypted column stores the key as-supplied; a
+// future iteration will wrap this with a KMS-backed envelope.
+model OrgApiKey {
+  id           String   @id @default(cuid())
+  orgId        String   @map("org_id")
+  provider     String   // "anthropic"
+  keyEncrypted String   @map("key_encrypted")
+  createdBy    String   @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([orgId, provider])
+  @@map("org_api_keys")
+}
+
+model Meeting {
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  project         Project  @relation(fields: [projectId], references: [id])
+  title           String
+  meetingDate     DateTime @map("meeting_date")
+  location        String?
+  facilitator     String?
+  attendees       Json? // array of {name, role}
+  agenda          Json? // array of strings
+  minutes         String? @db.Text
+  actionItems     Json?   @map("action_items") // array of {description, assignee, dueDate, status}
+  status          String   @default("draft") // draft, published
+  createdBy       String   @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("meetings")
+}
+
+model ProjectTemplate {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  name          String
+  description   String?
+  // Structure type the template applies to (wbs or cost_code).
+  structureType String   @map("structure_type")
+  // Snapshot of WBS / cost-code items. Each item is { code, name, parentCode,
+  // level, responsibleParty?, budget? } so the template can be re-applied
+  // without referencing the source project's item ids.
+  snapshot      Json
+  // Sprint 7: full project template snapshots. Optional — older templates
+  // saved before this field existed will have nulls and behave as
+  // WBS-only templates.
+  activitiesSnapshot Json? @map("activities_snapshot")
+  budgetSnapshot     Json? @map("budget_snapshot")
+  risksSnapshot      Json? @map("risks_snapshot")
+  lessonsSnapshot    Json? @map("lessons_snapshot")
+  // The project the template was created from, if any. Useful for "see the
+  // source" links; not required for the template to function.
+  sourceProjectId String? @map("source_project_id")
+  createdBy     String   @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId])
+  @@map("project_templates")
+}
+
+// Persisted weekly owner reports. The agent generates the report text +
+// structured sections, the PM can edit and mark as sent. The dashboard
+// surfaces "Owner Report Due" when the current week's report is missing.
+model OwnerReport {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  project     Project  @relation(fields: [projectId], references: [id])
+  // Friday of the report week. Stored as a date (UTC midnight).
+  weekEnding  DateTime @map("week_ending")
+  // Full report payload: { sections, full_report_text, source, ... }.
+  reportJson  Json     @map("report_json")
+  // Generated by which user (PM/owner_admin uid).
+  generatedBy String   @map("generated_by")
+  generatedAt DateTime @default(now()) @map("generated_at")
+  // Sent to the owner at — null until the PM clicks "Mark as Sent".
+  sentAt      DateTime? @map("sent_at")
+  // Free-form note added when sending, optional.
+  sentToEmail String?  @map("sent_to_email")
+
+  @@unique([projectId, weekEnding])
+  @@index([projectId, weekEnding])
+  @@map("owner_reports")
+}
+
+// Real-time lessons-learned capture. Lessons can be agent-flagged (auto
+// from pattern detection during morning-brief or pattern sweeps), PM-
+// entered manually, or field-reported (later, when the field UI ships).
+// `addedToTemplate` is set when a lesson should be carried into a project
+// template the next time one is saved.
+model LessonLearned {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  project           Project  @relation(fields: [projectId], references: [id])
+  title             String
+  description       String?  @db.Text
+  // Category enum (string column for SQLite-friendly migration safety):
+  //   schedule, cost, procurement, quality, safety, communications, risk, other
+  category          String
+  // Source enum:
+  //   agent_flagged, pm_entered, field_reported
+  source            String
+  impact            String?  @db.Text
+  recommendation    String?  @db.Text
+  // Optional reference to a schedule activity (DFOW) or cost code.
+  dfowRef           String?  @map("dfow_ref")
+  createdBy         String   @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  // Marks the lesson for inclusion in the next saved project template.
+  addedToTemplate   Boolean  @default(false) @map("added_to_template")
+
+  @@index([projectId, category])
+  @@index([projectId, source])
+  @@index([projectId, addedToTemplate])
+  @@map("lessons_learned")
+}
+
+// Sprint 9: IFC propagation audit log
+model DrawingAuditLog {
+  id         String   @id @default(cuid())
+  projectId  String   @map("project_id")
+  documentId String   @map("document_id")
+  eventType  String   @map("event_type")
+  actorId    String   @map("actor_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@index([documentId])
+  @@map("drawing_audit_log")
+}
+
+// Sprint 9: Field redlines
+model DrawingRedline {
+  id               String   @id @default(cuid())
+  projectId        String   @map("project_id")
+  documentId       String   @map("document_id")
+  revisionId       String?  @map("revision_id")
+  submittedBy      String   @map("submitted_by")
+  submittedAt      DateTime @default(now()) @map("submitted_at")
+  description      String
+  redlineType      String   @map("redline_type")
+  photoUrl         String?  @map("photo_url")
+  linkedRfiId      String?  @map("linked_rfi_id")
+  linkedActivityId String?  @map("linked_activity_id")
+  status           String   @default("pending")
+  reviewedBy       String?  @map("reviewed_by")
+  reviewedAt       DateTime? @map("reviewed_at")
+  reviewNotes      String?  @map("review_notes")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId])
+  @@index([documentId])
+  @@index([status])
+  @@map("drawing_redlines")
+}
+
+// Sprint 9: FCM push tokens
+model FcmToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String
+  platform  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, platform])
+  @@index([userId])
+  @@map("fcm_tokens")
+}
+
+// Sprint 9: Team management
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id          String    @id @default(cuid())
+  orgId       String    @map("org_id")
+  userId      String    @map("user_id")
+  email       String
+  displayName String?   @map("display_name")
+  role        String
+  invitedBy   String?   @map("invited_by")
+  invitedAt   DateTime  @default(now()) @map("invited_at")
+  joinedAt    DateTime? @map("joined_at")
+  status      String    @default("invited")
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+  @@map("organization_members")
+}
+
+model ProjectMember {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  userId      String   @map("user_id")
+  email       String
+  displayName String?  @map("display_name")
+  role        String
+  addedBy     String   @map("added_by")
+  addedAt     DateTime @default(now()) @map("added_at")
+  status      String   @default("invited")
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@map("project_members")
+}
+
+// Sprint 9: Subcontract milestones
+model SubcontractMilestone {
+  id                 String    @id @default(cuid())
+  subcontractId      String    @map("subcontract_id")
+  subcontract        Subcontract @relation(fields: [subcontractId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  plannedDate        DateTime  @map("planned_date")
+  actualDate         DateTime? @map("actual_date")
+  status             String    @default("pending")
+  linkedActivityId   String?   @map("linked_activity_id")
+  billingTrigger     Boolean   @default(false) @map("billing_trigger")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([subcontractId])
+  @@index([status])
+  @@map("subcontract_milestones")
+}
+
+// Per-user notification inbox. Sprint 8 Task 6.
+// One row per delivery — a notification is generated by a service
+// (e.g. an RFI is assigned to user X) and read by the recipient via
+// `GET /api/v1/notifications`. The bell-icon badge in the nav
+// shows the count of `read = false` rows for the calling user.
+//
+// `kind` is a string union (not a Postgres enum) so adding a new
+// notification type doesn't require a schema change:
+//   - rfi_assigned           : RFI ballInCourt set to me
+//   - rfi_answered           : someone answered an RFI I authored
+//   - issue_assigned         : Issue assignee set to me
+//   - schedule_change_request: a SCR now requires my approval
+//   - co_approved            : my CO was approved
+//   - co_rejected            : my CO was rejected
+//   - system                 : catch-all (e.g. project template applied)
+// `payload` is a JSON blob for kind-specific extras (projectId, RFI
+// number, etc.) so the bell can deep-link to the right screen
+// without a second API call.
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  kind       String
+  title      String
+  body       String?
+  payload    Json?
+  read       Boolean  @default(false)
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, read, createdAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ============================================================================
+// SiteDeck Ops — Sprint 10
+// ============================================================================
+// Internal-only operations console for Site Deck LLC owner_admin users.
+// The models below power the /admin section of the PM frontend (and the
+// help button on every page). They are NOT exposed to customers.
+//
+// Architectural note (ADMIN SECURITY RULE): every /admin/* route is gated
+// by `requireAuth + requireSiteDeckAdmin` (see src/middleware/express-auth.ts).
+// Non-admins get a 404 — never a 403 — so the route does not exist to them.
+
+// BugReport — one row per user-submitted bug from any SiteDeck product
+// (PM, Benchmark, Pro, Design). The triage agent in src/ops/triage.agent.ts
+// classifies each row and the operator can approve the fix via the
+// approval email flow.
+model BugReport {
+  id           String   @id @default(cuid())
+  // 'pm' | 'benchmark' | 'pro' | 'design'
+  product      String
+  userId       String   @map("user_id")
+  projectId    String?  @map("project_id")
+  route        String
+  pageTitle    String   @map("page_title")
+  // Last 10 console errors captured by the GetHelp button.
+  consoleErrors Json?  @map("console_errors")
+  // Most recent API call captured by the request interceptor.
+  lastApiCall  Json?   @map("last_api_call")
+  // What the user was trying to do. Only the user-action text the user
+  // typed is persisted here; the auto-captured fields above are metadata
+  // for triage. Free text — sanitized before any AI call.
+  userAction   String   @map("user_action")
+  browserInfo  Json?   @map("browser_info")
+  // 'user_error' | 'feature_request' | 'data_fix' | 'code_change'
+  classification            String?
+  classificationConfidence  Decimal? @map("classification_confidence") @db.Decimal(5, 2)
+  // 'new' | 'triaging' | 'user_error_resolved' | 'feature_logged' |
+  // 'data_fixed' | 'code_fix_pending' | 'code_fix_approved' |
+  // 'code_fix_deployed' | 'closed'
+  status        String   @default("new")
+  blastRadius   Json?   @map("blast_radius")
+  suggestedFix  String?  @map("suggested_fix")
+  // 'low' | 'medium' | 'high'
+  riskLevel     String?  @map("risk_level")
+  workaround    String?
+  resolvedAt    DateTime? @map("resolved_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  approvalToken BugApprovalToken?
+
+  @@index([status, createdAt])
+  @@index([product, status])
+  @@index([userId])
+  @@map("bug_reports")
+}
+
+// FeatureRequest — aggregated record of duplicate feature asks. A user
+// submitting a FEATURE_REQUEST classification creates a new row; the
+// triage agent increments `requestCount` when it detects a duplicate
+// (same product, same route, similar description).
+model FeatureRequest {
+  id           String   @id @default(cuid())
+  product      String
+  userId       String   @map("user_id")
+  projectId    String?  @map("project_id")
+  route        String
+  description  String
+  userRole     String   @map("user_role")
+  // 'new' | 'under_review' | 'planned' | 'declined' | 'shipped'
+  status       String   @default("new")
+  requestCount Int      @default(1) @map("request_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([product, status])
+  @@index([requestCount])
+  @@map("feature_requests")
+}
+
+// BugApprovalToken — single-use, time-bound token for the email approval
+// flow. Token expires 48h after creation. Tokens are the ONLY way the
+// approval flow is exposed — there is no UI-only approval path.
+model BugApprovalToken {
+  id            String   @id @default(cuid())
+  bugReportId   String   @unique @map("bug_report_id")
+  bugReport     BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  token         String   @unique
+  expiresAt     DateTime @map("expires_at")
+  approvedAt    DateTime? @map("approved_at")
+  approvedBy    String?  @map("approved_by")
+  rejectedAt    DateTime? @map("rejected_at")
+  rejectedBy    String?  @map("rejected_by")
+  rejectReason  String?  @map("reject_reason")
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("bug_approval_tokens")
+}
+
+// OpsAuditLog — immutable, append-only record of every ops action.
+// NEVER updated or deleted (enforced at service layer: only `create` calls).
+// Powers the /admin/audit view and the security review of admin actions.
+model OpsAuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  performedBy String   @map("performed_by")
+  // 'bug_report' | 'feature_request' | 'token' | 'fix_pipeline' | 'system'
+  targetType  String   @map("target_type")
+  targetId    String   @map("target_id")
+  details     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@map("ops_audit_log")
 }

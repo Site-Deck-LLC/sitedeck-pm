@@ -2,10 +2,14 @@ import express, { Application } from 'express';
 import path from 'path';
 import apiRoutes from './routes';
 import { errorHandlerMiddleware } from './lib/error-handler';
+import { corsForSiteDeck } from './middleware/cors';
 
 export function createApp(): Application {
   const app = express();
 
+  // CORS must run before express.json so OPTIONS preflight works for
+  // large bodies and before any other route logic.
+  app.use(corsForSiteDeck);
   app.use(express.json());
 
   // Serve React frontend build if it exists
