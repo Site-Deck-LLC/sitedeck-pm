@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1B2A4A" />
+    <title>SiteDeck PM — Offline</title>
+    <style>
+      :root {
+        --navy: #1B2A4A;
+        --navy-light: #2A3F6B;
+        --offwhite: #F7F8FA;
+        --gray500: #5A6072;
+        --gray400: #8C929D;
+        --gray300: #C4C8D0;
+        --gray200: #E2E4E8;
+        --gray100: #F0F1F3;
+        --orange: #E8720C;
+        --green: #22A06B;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: var(--offwhite);
+        color: var(--navy);
+      }
+      .wrap {
+        min-height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        max-width: 520px;
+        width: 100%;
+        background: #fff;
+        border: 1px solid var(--gray300);
+        border-radius: 12px;
+        padding: 32px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(27, 42, 74, 0.08);
+      }
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--navy);
+      }
+      p {
+        margin: 0 0 16px 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--gray500);
+      }
+      .badge {
+        display: inline-block;
+        margin-bottom: 16px;
+        padding: 4px 12px;
+        background: #FDF3E0;
+        color: var(--orange);
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .meta-row {
+        display: flex;
+        justify-content: space-between;
+        background: var(--gray100);
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 16px;
+        font-size: 12px;
+        color: var(--gray500);
+      }
+      .meta-row strong { color: var(--navy); }
+      .cached-list {
+        text-align: left;
+        background: var(--gray100);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        max-height: 180px;
+        overflow-y: auto;
+      }
+      .cached-list-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--navy);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .cached-list ul {
+        margin: 0; padding-left: 18px;
+        font-size: 13px; color: var(--gray500);
+      }
+      .cached-list li { margin-bottom: 2px; }
+      .cached-empty {
+        font-size: 13px; color: var(--gray400);
+        font-style: italic;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        background: var(--navy);
+        color: #fff;
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 6px;
+        cursor: pointer;
+        margin: 4px;
+      }
+      button:hover { background: var(--navy-light); }
+      button.secondary {
+        background: var(--gray200);
+        color: var(--navy);
+      }
+      button.secondary:hover { background: var(--gray300); }
+      .small {
+        margin-top: 16px;
+        font-size: 12px;
+        color: var(--gray500);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <span class="badge">Offline</span>
+        <h1>You're not connected</h1>
+        <p>
+          SiteDeck PM is showing cached data where available. RFIs, drawings,
+          and the dashboard will refresh as soon as you're back online.
+        </p>
+
+        <div class="meta-row">
+          <span>Last sync: <strong id="last-sync">never</strong></span>
+          <span>Cached: <strong id="cache-count">0</strong> projects</span>
+        </div>
+
+        <div class="cached-list">
+          <div class="cached-list-title">Cached projects</div>
+          <div id="cached-projects"><span class="cached-empty">No cached projects yet.</span></div>
+        </div>
+
+        <div>
+          <button onclick="location.reload()">Try again</button>
+          <button class="secondary" onclick="viewCached()">View cached projects</button>
+        </div>
+        <p class="small">
+          If the problem persists, check your Wi-Fi or cell signal.
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // Sprint 11: surface the last sync timestamp and the list of
+      // projects currently in the Workbox cache. We open the same
+      // caches the runtime config declares (api-projects) and read
+      // any cached /api/v1/projects response. The names are taken
+      // from vite.config.ts; if those change, update here too.
+      (async function loadCacheState() {
+        try {
+          if (!('caches' in self)) return;
+          const cacheNames = await caches.keys();
+          let total = 0;
+          const projects = new Set();
+          let lastSync = null;
+          for (const name of cacheNames) {
+            if (!name.startsWith('api-')) continue;
+            const cache = await caches.open(name);
+            const reqs = await cache.keys();
+            for (const req of reqs) {
+              const url = new URL(req.url);
+              if (url.pathname === '/api/v1/projects' || url.pathname.endsWith('/api/v1/projects')) {
+                const res = await cache.match(req);
+                if (res) {
+                  const data = await res.clone().json().catch(() => null);
+                  if (Array.isArray(data)) {
+                    data.forEach((p) => {
+                      if (p && (p.name || p.id)) projects.add(p.name || p.id);
+                    });
+                    total += data.length;
+                    const dateHeader = res.headers.get('date') || res.headers.get('x-served-at');
+                    if (dateHeader && (!lastSync || new Date(dateHeader) > lastSync)) {
+                      lastSync = new Date(dateHeader);
+                    }
+                  }
+                }
+              }
+            }
+          }
+          document.getElementById('cache-count').textContent = String(total);
+          if (lastSync) {
+            document.getElementById('last-sync').textContent = lastSync.toLocaleString();
+          }
+          const target = document.getElementById('cached-projects');
+          if (projects.size > 0) {
+            const ul = document.createElement('ul');
+            for (const name of projects) {
+              const li = document.createElement('li');
+              li.textContent = name;
+              ul.appendChild(li);
+            }
+            target.replaceChildren(ul);
+          }
+        } catch (e) {
+          // If anything goes wrong, the page still works — just without
+          // the cache details.
+        }
+      })();
+
+      function viewCached() {
+        // The "View cached projects" button routes the user to the
+        // app shell, which will read from the runtime cache when
+        // network is down.
+        location.href = '/';
+      }
+    </script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getProjects, getBillingStatus } from '../api';
-import { COLORS, FONTS, SHADOWS, BORDERS } from '../styles/design-system';
+import { getProjects } from '../api';
+import { COLORS, FONTS, SHADOWS, BORDERS, STATUS_COLORS } from '../styles/design-system';
+import { getCurrentRole } from '../auth';
 
 interface Project {
   id: string;
@@ -11,15 +12,72 @@ interface Project {
   endDate?: string;
 }
 
+interface ProjectSummary {
+  id: string;
+  name: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+  cpi: number;
+  spi: number;
+  healthStatus: 'green' | 'amber' | 'red';
+  openItems: number;
+  location: { x: number; y: number }; // percentage on US map
+}
+
+// ─── Mock project locations (approximate US map %) ───
+const MOCK_LOCATIONS: Record<string, { x: number; y: number }> = {
+  // Texas (BESS project)
+  default: { x: 48, y: 72 },
+};
+
+function getMockLocation(name: string): { x: number; y: number } {
+  const key = Object.keys(MOCK_LOCATIONS).find((k) => name.toLowerCase().includes(k.toLowerCase()));
+  if (key) return MOCK_LOCATIONS[key];
+  // Deterministic pseudo-random based on name length
+  const hash = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return {
+    x: 20 + (hash % 55),
+    y: 30 + (hash % 45),
+  };
+}
+
+function getMockSummary(project: Project): ProjectSummary {
+  const hash = project.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const cpi = 0.85 + (hash % 25) / 100; // 0.85 - 1.10
+  const spi = 0.80 + (hash % 30) / 100; // 0.80 - 1.10
+  const healthStatus = cpi >= 1.0 ? 'green' : cpi >= 0.95 ? 'amber' : 'red';
+  const openItems = hash % 8;
+  return {
+    ...project,
+    cpi,
+    spi,
+    healthStatus,
+    openItems,
+    location: getMockLocation(project.name),
+  };
+}
+
 export function Projects({
   onSelectProject,
+  onViewMap,
   onLogout,
+  onNavigateTemplates,
+  onNavigateBilling,
+  onNavigatePortfolio,
+  onNavigateAdmin,
+  headerRight,
 }: {
   onSelectProject: (id: string) => void;
+  onViewMap: () => void;
   onLogout: () => void;
+  onNavigateTemplates?: () => void;
+  onNavigateBilling?: () => void;
+  onNavigatePortfolio?: () => void;
+  onNavigateAdmin?: () => void;
+  headerRight?: React.ReactNode;
 }) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [billing, setBilling] = useState<any>(null);
+  const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -27,11 +85,8 @@ export function Projects({
     async function load() {
       try {
         const list = await getProjects();
-        setProjects(list);
-        if (list[0]?.orgId) {
-          const status = await getBillingStatus(list[0].orgId);
-          setBilling(status);
-        }
+        // Generate mock summaries with CPI/SPI for each project
+        setSummaries(list.map(getMockSummary));
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -43,7 +98,7 @@ export function Projects({
 
   return (
     <div style={{ minHeight: '100vh', background: COLORS.offWhite, fontFamily: FONTS.family }}>
-      {/* Nav — always visible */}
+      {/* Top Nav */}
       <nav style={{
         display: 'flex',
         alignItems: 'center',
@@ -59,21 +114,24 @@ export function Projects({
           </div>
           <span style={{ fontSize: FONTS.size.md, fontWeight: FONTS.weight.bold }}>SiteDeck PM</span>
         </div>
-        <button onClick={onLogout} style={{
-          padding: '6px 14px',
-          borderRadius: BORDERS.radius.sm,
-          border: 'none',
-          background: COLORS.orange,
-          color: COLORS.white,
-          fontSize: FONTS.size.sm,
-          fontWeight: FONTS.weight.semibold,
-          cursor: 'pointer',
-        }}>
-          Sign Out
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {headerRight}
+          <button onClick={onLogout} style={{
+            padding: '6px 14px',
+            borderRadius: BORDERS.radius.sm,
+            border: 'none',
+            background: COLORS.orange,
+            color: COLORS.white,
+            fontSize: FONTS.size.sm,
+            fontWeight: FONTS.weight.semibold,
+            cursor: 'pointer',
+          }}>
+            Sign Out
+          </button>
+        </div>
       </nav>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 32 }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 32px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '80px 0', color: COLORS.textSecondary }}>
             <div style={{ width: 40, height: 40, border: `3px solid ${COLORS.gray200}`, borderTop: `3px solid ${COLORS.orange}`, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
@@ -99,105 +157,247 @@ export function Projects({
           </div>
         ) : (
           <>
-            <header style={{ marginBottom: 32 }}>
-              <h1 style={{ fontSize: FONTS.size.xxl, fontWeight: FONTS.weight.bold, color: COLORS.textPrimary, margin: '0 0 4px 0' }}>
-                Projects
-              </h1>
-              <p style={{ fontSize: FONTS.size.md, color: COLORS.textSecondary, margin: 0 }}>
-                Select a project to view the dashboard
-              </p>
-            </header>
-
-            {billing && (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '10px 16px',
-                borderRadius: BORDERS.radius.md,
-                background: COLORS.white,
-                border: `1px solid ${COLORS.gray200}`,
-                marginBottom: 24,
-                boxShadow: SHADOWS.sm,
-              }}>
-                <span style={{ fontSize: FONTS.size.sm, color: COLORS.textSecondary }}>Plan:</span>
-                <span style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: COLORS.orange, textTransform: 'uppercase' }}>{billing.planTier}</span>
-                <span style={{ color: COLORS.gray300 }}>|</span>
-                <span style={{ fontSize: FONTS.size.sm, color: COLORS.textSecondary }}>{billing.projectCount} / {billing.projectLimit} projects</span>
-                <span style={{ color: COLORS.gray300 }}>|</span>
-                <span style={{ fontSize: FONTS.size.sm, color: COLORS.textSecondary }}>Status:</span>
-                <span style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: billing.status === 'active' ? COLORS.green : billing.status === 'trialing' ? COLORS.amber : COLORS.red }}>
-                  {billing.status}
-                </span>
+            {/* Header + Toggle */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <div>
+                <h1 style={{ fontSize: FONTS.size.xxl, fontWeight: FONTS.weight.bold, color: COLORS.textPrimary, margin: '0 0 4px 0' }}>
+                  Projects
+                </h1>
+                <p style={{ fontSize: FONTS.size.md, color: COLORS.textSecondary, margin: 0 }}>
+                  {summaries.length} active project{summaries.length !== 1 ? 's' : ''}
+                </p>
               </div>
-            )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
-              {projects.map((p) => (
-                <div
-                  key={p.id}
+              {onNavigateTemplates && (
+                <button
+                  onClick={onNavigateTemplates}
                   style={{
-                    padding: 24,
-                    borderRadius: BORDERS.radius.lg,
+                    padding: '8px 16px',
+                    borderRadius: BORDERS.radius.md,
                     border: `1px solid ${COLORS.gray200}`,
                     background: COLORS.white,
-                    boxShadow: SHADOWS.md,
+                    color: COLORS.textPrimary,
+                    fontSize: FONTS.size.sm,
+                    fontWeight: FONTS.weight.semibold,
                     cursor: 'pointer',
-                    transition: 'transform 0.15s, box-shadow 0.15s',
-                  }}
-                  onClick={() => onSelectProject(p.id)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = SHADOWS.lg;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = SHADOWS.md;
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <h3 style={{ fontSize: FONTS.size.lg, fontWeight: FONTS.weight.bold, color: COLORS.textPrimary, margin: 0, lineHeight: 1.3 }}>
-                      {p.name}
-                    </h3>
-                    <span style={{
-                      padding: '4px 10px',
-                      borderRadius: '20px',
-                      fontSize: FONTS.size.xs,
-                      fontWeight: FONTS.weight.semibold,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      background: p.status === 'active' ? COLORS.greenLight : COLORS.gray100,
-                      color: p.status === 'active' ? COLORS.green : COLORS.textSecondary,
-                    }}>
-                      {p.status}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                    <div>
-                      <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Start</div>
-                      <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{p.startDate?.slice(0, 10) || '—'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>End</div>
-                      <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{p.endDate?.slice(0, 10) || '—'}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: FONTS.size.xs, color: COLORS.orange, fontWeight: FONTS.weight.semibold, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      View Dashboard →
-                    </span>
-                  </div>
-                </div>
-              ))}
-
-              {projects.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 60, color: COLORS.textMuted, gridColumn: '1 / -1' }}>
-                  No projects found.
-                </div>
+                  Template Library
+                </button>
               )}
+
+              {onNavigatePortfolio && (
+                <button
+                  onClick={onNavigatePortfolio}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: BORDERS.radius.md,
+                    border: `1px solid ${COLORS.gray200}`,
+                    background: COLORS.white,
+                    color: COLORS.textPrimary,
+                    fontSize: FONTS.size.sm,
+                    fontWeight: FONTS.weight.semibold,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" />
+                  </svg>
+                  Portfolio
+                </button>
+              )}
+
+              {onNavigateBilling && (
+                <button
+                  onClick={onNavigateBilling}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: BORDERS.radius.md,
+                    border: `1px solid ${COLORS.gray200}`,
+                    background: COLORS.white,
+                    color: COLORS.textPrimary,
+                    fontSize: FONTS.size.sm,
+                    fontWeight: FONTS.weight.semibold,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Billing
+                </button>
+              )}
+
+              {getCurrentRole() === 'owner_admin' && onNavigateAdmin && (
+                <button
+                  onClick={onNavigateAdmin}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: BORDERS.radius.md,
+                    border: 'none',
+                    background: COLORS.navy,
+                    color: COLORS.white,
+                    fontSize: FONTS.size.sm,
+                    fontWeight: FONTS.weight.semibold,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  title="SiteDeck Ops (admin only)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+                  </svg>
+                  Admin
+                </button>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, background: COLORS.white, padding: 4, borderRadius: BORDERS.radius.md, border: `1px solid ${COLORS.gray200}` }}>
+                <button
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: BORDERS.radius.sm,
+                    border: 'none',
+                    background: COLORS.navy,
+                    color: COLORS.white,
+                    fontSize: FONTS.size.sm,
+                    fontWeight: FONTS.weight.semibold,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+                  </svg>
+                  Tiles
+                </button>
+                <button
+                  onClick={onViewMap}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: BORDERS.radius.sm,
+                    border: 'none',
+                    background: 'transparent',
+                    color: COLORS.textSecondary,
+                    fontSize: FONTS.size.sm,
+                    fontWeight: FONTS.weight.semibold,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
+                  </svg>
+                  Map
+                </button>
+              </div>
             </div>
+
+            {/* Tile View */}
+            {
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 20 }}>
+                {summaries.map((s) => {
+                  const colors = STATUS_COLORS[s.healthStatus];
+                  return (
+                    <div
+                      key={s.id}
+                      style={{
+                        padding: 24,
+                        borderRadius: BORDERS.radius.lg,
+                        border: `1px solid ${COLORS.gray200}`,
+                        borderTop: `4px solid ${colors.border}`,
+                        background: COLORS.white,
+                        boxShadow: SHADOWS.md,
+                        cursor: 'pointer',
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                      }}
+                      onClick={() => onSelectProject(s.id)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = SHADOWS.lg;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = SHADOWS.md;
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <h3 style={{ fontSize: FONTS.size.lg, fontWeight: FONTS.weight.bold, color: COLORS.textPrimary, margin: 0, lineHeight: 1.3 }}>
+                          {s.name}
+                        </h3>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontSize: FONTS.size.xs,
+                          fontWeight: FONTS.weight.semibold,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          background: colors.light,
+                          color: colors.bg,
+                        }}>
+                          {s.status}
+                        </span>
+                      </div>
+
+                      {/* CPI / SPI mini gauges */}
+                      <div style={{ display: 'flex', gap: 16, marginBottom: 16, padding: 12, background: COLORS.offWhite, borderRadius: BORDERS.radius.md }}>
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ fontSize: FONTS.size.xl, fontWeight: FONTS.weight.bold, color: s.cpi >= 1.0 ? COLORS.green : s.cpi >= 0.95 ? COLORS.amber : COLORS.red }}>
+                            {s.cpi.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>CPI</div>
+                        </div>
+                        <div style={{ width: 1, background: COLORS.gray200 }} />
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ fontSize: FONTS.size.xl, fontWeight: FONTS.weight.bold, color: s.spi >= 1.0 ? COLORS.green : s.spi >= 0.95 ? COLORS.amber : COLORS.red }}>
+                            {s.spi.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>SPI</div>
+                        </div>
+                        <div style={{ width: 1, background: COLORS.gray200 }} />
+                        <div style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ fontSize: FONTS.size.xl, fontWeight: FONTS.weight.bold, color: s.openItems > 0 ? COLORS.amber : COLORS.green }}>
+                            {s.openItems}
+                          </div>
+                          <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Open Items</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                        <div>
+                          <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Start</div>
+                          <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{s.startDate?.slice(0, 10) || '—'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>End</div>
+                          <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{s.endDate?.slice(0, 10) || '—'}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: FONTS.size.xs, color: COLORS.orange, fontWeight: FONTS.weight.semibold, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          View Dashboard →
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {summaries.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: 60, color: COLORS.textMuted, gridColumn: '1 / -1' }}>
+                    No projects found.
+                  </div>
+                )}
+              </div>
+            }
           </>
         )}
       </div>

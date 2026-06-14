@@ -23,7 +23,9 @@ export type OpsTargetType =
   | 'token'
   | 'fix_pipeline'
   | 'system'
-  | 'user';
+  | 'user'
+  | 'bug'
+  | 'project_member';
 
 export interface LogOpsInput {
   action: string;

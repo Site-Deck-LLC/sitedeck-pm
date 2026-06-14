@@ -32,6 +32,7 @@ const BillingSettings = lazy(() =>
 );
 const Drawings = lazy(() => import('./components/Drawings').then((m) => ({ default: m.Drawings })));
 const Portfolio = lazy(() => import('./components/Portfolio').then((m) => ({ default: m.Portfolio })));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
 
 type View =
   | 'projects'
@@ -44,7 +45,8 @@ type View =
   | 'templates'
   | 'billing'
   | 'drawings'
-  | 'portfolio';
+  | 'portfolio'
+  | 'admin';
 
 interface AppState {
   view: View;
@@ -213,6 +215,14 @@ export default function App() {
     );
   }
 
+  if (view === 'admin') {
+    return (
+      <Suspense fallback={<RouteLoading label="Loading admin…" />}>
+        <AdminDashboard onBack={() => push({ view: 'projects', projectId: null, tileKey: null })} />
+      </Suspense>
+    );
+  }
+
   return (
     <>
       <NetworkBanner />
@@ -223,6 +233,7 @@ export default function App() {
         onNavigateTemplates={() => push({ view: 'templates', projectId: null, tileKey: null })}
         onNavigateBilling={() => push({ view: 'billing', projectId: null, tileKey: null })}
         onNavigatePortfolio={() => push({ view: 'portfolio', projectId: null, tileKey: null })}
+        onNavigateAdmin={() => push({ view: 'admin', projectId: null, tileKey: null })}
         headerRight={<NotificationBell onSelectProject={(id) => push({ view: 'dashboard', projectId: id, tileKey: null })} />}
       />
       <InstallPrompt />
