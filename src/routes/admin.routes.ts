@@ -219,7 +219,12 @@ router.get(
         vps: { ok: true },
         postgres: { ok: true },
         anthropic: { ok: Boolean(process.env.ANTHROPIC_API_KEY) },
-        sendgrid: { ok: Boolean(process.env.SENDGRID_API_KEY) },
+        mail: {
+          ok: Boolean(process.env.MAIL_HOST && process.env.MAIL_USER && process.env.MAIL_PASS),
+          host: process.env.MAIL_HOST || null,
+          from: process.env.MAIL_FROM || null,
+          transport: 'nodemailer',
+        },
       },
       anthropicToday: {
         costUsd: today._sum.costUsd || 0,
