@@ -27,6 +27,9 @@ import { RfiDetailView } from './RfiDetailView';
 import { SubmittalDetailView } from './SubmittalDetailView';
 import { ChangeOrderDetailView } from './ChangeOrderDetailView';
 import { RiskIntelligencePanel } from './RiskIntelligencePanel';
+import { ProjectSidebar, type ProjectNavItem } from './ProjectSidebar';
+import type { ConnectedProductsState } from './ConnectedProducts';
+import type { SidebarUser } from './Sidebar';
 
 interface Tile {
   name: string;
@@ -380,6 +383,8 @@ export function Dashboard({
   const [selectedCoId, setSelectedCoId] = useState<string | null>(null);
   const [ownerReportDue, setOwnerReportDue] = useState<boolean>(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState<boolean>(false);
+  const [connectedProducts, setConnectedProducts] = useState<ConnectedProductsState | undefined>();
+  const [user, setUser] = useState<SidebarUser | null>(null);
 
   // Visualization data
   const [cashFlowData, setCashFlowData] = useState<any>(null);
@@ -486,6 +491,56 @@ export function Dashboard({
     };
   }, [projectId]);
 
+  // Best-effort fetch of /api/v1/health for the ConnectedProducts dots.
+  // The endpoint is unauthenticated, but a missing token doesn't matter —
+  // the route is open. We never throw from here.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/health');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.connectedProducts) {
+          setConnectedProducts(data.connectedProducts);
+        }
+      } catch {
+        // Health endpoint down — leave undefined, dots render gray.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Best-effort read of current user info for the sidebar footer.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let info: SidebarUser = {
+        email: localStorage.getItem('sitedeck-dev-email') || null,
+        displayName: null,
+      };
+      try {
+        const { getFirebaseAuth } = await import('../firebase');
+        const auth = getFirebaseAuth();
+        if (auth?.currentUser) {
+          info = {
+            email: auth.currentUser.email ?? info.email,
+            displayName: auth.currentUser.displayName ?? null,
+          };
+        }
+      } catch {
+        // No Firebase or not initialized — keep the dev fallback.
+      }
+      if (!cancelled) setUser(info);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function showToast(message: string, tone: 'info' | 'success' | 'error' = 'info') {
     setToast({ message, tone });
   }
@@ -494,7 +549,7 @@ export function Dashboard({
   const criticalTiles = tiles.filter(([, tile]) => tile.status === 'red');
   const alertCount = criticalTiles.reduce((sum, [, tile]) => sum + (tile.count || 0), 0);
 
-  const navItems = [
+  const navItems: ProjectNavItem[] = [
     { key: 'dashboard', icon: Icons.dashboard, label: 'Dashboard' },
     { key: 'schedule', icon: Icons.schedule, label: 'Schedule' },
     { key: 'rfi', icon: Icons.rfi, label: 'RFI' },
@@ -537,152 +592,221 @@ export function Dashboard({
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: COLORS.offWhite, fontFamily: FONTS.family }}>
-      {/* ─── Left Icon Sidebar ─── */}
-      <aside style={sidebarStyle}>
-        <div style={{ padding: '16px 0', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: COLORS.orange, display: 'flex', alignItems: 'center', justifyContent: 'center', color: COLORS.white, fontWeight: FONTS.weight.bold, fontSize: FONTS.size.md }}>
-            S
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 8px' }}>
-          {navItems.map((item) => (
+      {/* ─── Left Navy Sidebar (224px) ─── */}
+      <ProjectSidebar
+        navItems={navItems}
+        activeNav={activeNav}
+        onSelectKey={(key) => {
+          if (key === 'owner-reports' && onNavigateOwnerReports) {
+            onNavigateOwnerReports();
+            return;
+          }
+          if (key === 'lessons' && onNavigateLessons) {
+            onNavigateLessons();
+            return;
+          }
+          if (key === 'drawings' && onNavigateDrawings) {
+            onNavigateDrawings();
+            return;
+          }
+          setActiveNav(key);
+          if (key === 'schedule') onSelectTile('schedule');
+        }}
+        user={user}
+        onLogout={onLogout}
+        connectedProducts={connectedProducts}
+        headerSlot={
+          <div
+            style={{
+              padding: '16px 16px',
+              borderBottom: '1px solid rgba(255,255,255,0.1)',
+              position: 'relative',
+            }}
+          >
             <button
-              key={item.key}
-              onClick={() => {
-                if (item.key === 'owner-reports' && onNavigateOwnerReports) {
-                  onNavigateOwnerReports();
-                  return;
-                }
-                if (item.key === 'lessons' && onNavigateLessons) {
-                  onNavigateLessons();
-                  return;
-                }
-                if (item.key === 'drawings' && onNavigateDrawings) {
-                  onNavigateDrawings();
-                  return;
-                }
-                setActiveNav(item.key);
-                if (item.key === 'schedule') onSelectTile('schedule');
-              }}
+              onClick={onNavigateHome}
+              title="Back to Projects"
               style={{
-                ...navIconButtonStyle,
-                background: activeNav === item.key ? COLORS.navyLight : 'transparent',
-                color: activeNav === item.key ? COLORS.white : COLORS.gray400,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'none',
+                border: 'none',
+                color: COLORS.white,
+                cursor: 'pointer',
+                padding: 0,
+                fontFamily: 'inherit',
+                marginBottom: 12,
               }}
-              title={item.label}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
             >
-              {item.icon}
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  background: COLORS.orange,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: COLORS.white,
+                  fontWeight: FONTS.weight.bold,
+                  fontSize: FONTS.size.xs,
+                }}
+              >
+                S
+              </div>
+              <span style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold }}>
+                SiteDeck PM
+              </span>
             </button>
-          ))}
-        </div>
-      </aside>
+
+            <button
+              onClick={() => setShowProjectSwitcher((s) => !s)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: 'rgba(255,255,255,0.05)',
+                color: COLORS.white,
+                fontSize: FONTS.size.sm,
+                fontWeight: FONTS.weight.medium,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+            >
+              <span
+                style={{
+                  maxWidth: 160,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {currentProject?.name || 'Select Project'}
+              </span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0 }}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            <button
+              onClick={() => setShowSaveTemplate(true)}
+              title="Save this project as a reusable template"
+              style={{
+                width: '100%',
+                marginTop: 8,
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: 'transparent',
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: FONTS.size.xs,
+                fontWeight: FONTS.weight.semibold,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                e.currentTarget.style.color = COLORS.white;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+              }}
+            >
+              Save as Template
+            </button>
+
+            {showProjectSwitcher && (
+              <div
+                style={{
+                  ...projectSwitcherDropdownStyle,
+                  position: 'absolute',
+                  top: '100%',
+                  left: 16,
+                  right: 16,
+                  marginTop: 4,
+                  zIndex: 50,
+                }}
+              >
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    borderBottom: `1px solid ${COLORS.gray200}`,
+                    fontWeight: FONTS.weight.bold,
+                    fontSize: FONTS.size.sm,
+                    color: COLORS.textPrimary,
+                  }}
+                >
+                  Switch Project
+                </div>
+                {projects.map((p) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      padding: '10px 14px',
+                      cursor: 'pointer',
+                      borderBottom: `1px solid ${COLORS.gray100}`,
+                      background: p.id === projectId ? COLORS.offWhite : 'transparent',
+                      fontWeight: p.id === projectId ? FONTS.weight.semibold : FONTS.weight.regular,
+                    }}
+                    onClick={() => {
+                      setShowProjectSwitcher(false);
+                      if (p.id !== projectId) {
+                        window.location.href = `/?project=${p.id}`;
+                        window.location.reload();
+                      }
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.offWhite)}
+                    onMouseLeave={(e) => {
+                      if (p.id !== projectId) e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <div style={{ fontSize: FONTS.size.sm, color: COLORS.textPrimary }}>{p.name}</div>
+                    {p.id === projectId && (
+                      <div style={{ fontSize: FONTS.size.xs, color: COLORS.green, marginTop: 2 }}>
+                        Current project
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        }
+      />
 
       {/* ─── Main Content ─── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Top Navigation Bar */}
         <nav style={topNavStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={onNavigateHome}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: COLORS.textPrimary,
-                cursor: 'pointer',
-                padding: 4,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-              title="Back to Projects"
-            >
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: COLORS.orange, display: 'flex', alignItems: 'center', justifyContent: 'center', color: COLORS.white, fontWeight: FONTS.weight.bold, fontSize: FONTS.size.xs }}>S</div>
-              <span style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: COLORS.textPrimary }}>SiteDeck PM</span>
-            </button>
-
-            <div style={{ position: 'relative', marginLeft: 16, paddingLeft: 16, borderLeft: `1px solid ${COLORS.gray200}` }}>
-              <button
-                onClick={() => setShowProjectSwitcher((s) => !s)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 12px',
-                  borderRadius: BORDERS.radius.md,
-                  border: `1px solid ${COLORS.gray200}`,
-                  background: COLORS.white,
-                  color: COLORS.textPrimary,
-                  fontSize: FONTS.size.sm,
-                  fontWeight: FONTS.weight.medium,
-                  cursor: 'pointer',
-                }}
-              >
-                <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {currentProject?.name || 'Select Project'}
-                </span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
-
-              <button
-                onClick={() => setShowSaveTemplate(true)}
-                title="Save this project as a reusable template"
-                style={{
-                  marginLeft: 8,
-                  padding: '6px 12px',
-                  borderRadius: BORDERS.radius.md,
-                  border: `1px solid ${COLORS.gray200}`,
-                  background: COLORS.white,
-                  color: COLORS.textPrimary,
-                  fontSize: FONTS.size.xs,
-                  fontWeight: FONTS.weight.semibold,
-                  cursor: 'pointer',
-                }}
-              >
-                Save as Template
-              </button>
-
-              {showProjectSwitcher && (
-                <div style={projectSwitcherDropdownStyle}>
-                  <div style={{ padding: '10px 14px', borderBottom: `1px solid ${COLORS.gray200}`, fontWeight: FONTS.weight.bold, fontSize: FONTS.size.sm, color: COLORS.textPrimary }}>
-                    Switch Project
-                  </div>
-                  {projects.map((p) => (
-                    <div
-                      key={p.id}
-                      style={{
-                        padding: '10px 14px',
-                        cursor: 'pointer',
-                        borderBottom: `1px solid ${COLORS.gray100}`,
-                        background: p.id === projectId ? COLORS.offWhite : 'transparent',
-                        fontWeight: p.id === projectId ? FONTS.weight.semibold : FONTS.weight.regular,
-                      }}
-                      onClick={() => {
-                        setShowProjectSwitcher(false);
-                        if (p.id !== projectId) {
-                          window.location.href = `/?project=${p.id}`;
-                          window.location.reload();
-                        }
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.offWhite; }}
-                      onMouseLeave={(e) => { if (p.id !== projectId) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      <div style={{ fontSize: FONTS.size.sm, color: COLORS.textPrimary }}>{p.name}</div>
-                      {p.id === projectId && (
-                        <div style={{ fontSize: FONTS.size.xs, color: COLORS.green, marginTop: 2 }}>Current project</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
             <div style={searchBarStyle}>
               {Icons.search}
               <input type="text" placeholder="Search anything here..." style={searchInputStyle} />
             </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {ownerReportDue && onNavigateOwnerReports && (
               <button
                 onClick={onNavigateOwnerReports}
@@ -713,37 +837,60 @@ export function Dashboard({
               </button>
               {showAlerts && (
                 <div style={topAlertDropdownStyle}>
-                  <div style={{ padding: '10px 14px', borderBottom: `1px solid ${COLORS.gray200}`, fontWeight: FONTS.weight.bold, fontSize: FONTS.size.sm, color: COLORS.textPrimary }}>
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      borderBottom: `1px solid ${COLORS.gray200}`,
+                      fontWeight: FONTS.weight.bold,
+                      fontSize: FONTS.size.sm,
+                      color: COLORS.textPrimary,
+                    }}
+                  >
                     Critical Alerts ({alertCount})
                   </div>
                   {criticalTiles.length === 0 && (
-                    <div style={{ padding: '12px 14px', fontSize: FONTS.size.sm, color: COLORS.textMuted }}>No critical alerts</div>
+                    <div style={{ padding: '12px 14px', fontSize: FONTS.size.sm, color: COLORS.textMuted }}>
+                      No critical alerts
+                    </div>
                   )}
                   {criticalTiles.map(([key, tile]) => (
                     <div
                       key={key}
-                      style={{ padding: '10px 14px', borderBottom: `1px solid ${COLORS.gray100}`, cursor: 'pointer' }}
-                      onClick={() => { setShowAlerts(false); onSelectTile(key); }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.offWhite; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                      style={{
+                        padding: '10px 14px',
+                        borderBottom: `1px solid ${COLORS.gray100}`,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        setShowAlerts(false);
+                        onSelectTile(key);
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.offWhite)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: COLORS.red }}>{tile.name}</div>
-                      <div style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary, marginTop: 2 }}>{tile.summary}</div>
+                      <div
+                        style={{
+                          fontSize: FONTS.size.sm,
+                          fontWeight: FONTS.weight.semibold,
+                          color: COLORS.red,
+                        }}
+                      >
+                        {tile.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: FONTS.size.xs,
+                          color: COLORS.textSecondary,
+                          marginTop: 2,
+                        }}
+                      >
+                        {tile.summary}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 8, borderLeft: `1px solid ${COLORS.gray200}` }}>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold, color: COLORS.textPrimary }}>Mr. Robert</div>
-                <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted }}>Manager</div>
-              </div>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: COLORS.navyLight, display: 'flex', alignItems: 'center', justifyContent: 'center', color: COLORS.white }}>
-                {Icons.user}
-              </div>
-            </div>
-            <button onClick={onLogout} style={{ ...logoutButtonStyle, marginLeft: 8 }}>Sign Out</button>
           </div>
         </nav>
 
@@ -1406,29 +1553,6 @@ function MiniKpi({ icon, label, value }: { icon: React.ReactNode; label: string;
 
 // ─── Styles ───
 
-const sidebarStyle: React.CSSProperties = {
-  width: 56,
-  background: COLORS.white,
-  borderRight: `1px solid ${COLORS.gray200}`,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  paddingTop: 8,
-  flexShrink: 0,
-};
-
-const navIconButtonStyle: React.CSSProperties = {
-  width: 40,
-  height: 40,
-  borderRadius: BORDERS.radius.md,
-  border: 'none',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  cursor: 'pointer',
-  transition: 'all 0.15s',
-};
-
 const topNavStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -1516,17 +1640,6 @@ const projectSwitcherDropdownStyle: React.CSSProperties = {
   overflow: 'hidden',
   maxHeight: 320,
   overflowY: 'auto',
-};
-
-const logoutButtonStyle: React.CSSProperties = {
-  padding: '6px 14px',
-  borderRadius: BORDERS.radius.sm,
-  border: 'none',
-  background: COLORS.orange,
-  color: COLORS.white,
-  fontSize: FONTS.size.sm,
-  fontWeight: FONTS.weight.semibold,
-  cursor: 'pointer',
 };
 
 const bodyLayoutStyle: React.CSSProperties = {

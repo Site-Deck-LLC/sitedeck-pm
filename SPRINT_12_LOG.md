@@ -55,4 +55,29 @@ $ curl -s https://projects.sitedeck.pro/api/v1/health | jq .
 
 ### Open follow-ups
 - Benchmark "heartbeat" — to make the Benchmark dot green in normal operation, schedule a daily no-op `pm.heartbeat` outbound to Benchmark. Today it stays gray until the first real 2xx send.
-- Dashboard / Gantt — they have a 56px icon rail already. The user scoped this sprint to Projects only. A future sprint can swap the rail for a 224px navy sidebar to fully unify the look.
+- ~~Dashboard / Gantt — they have a 56px icon rail already. The user scoped this sprint to Projects only.~~ **Resolved in follow-up:** Dashboard swapped to a 224px navy rail via the new `ProjectSidebar` component. The Top Nav still hosts search + alerts + owner-report chip (real product features). Gantt continues to use its own layout.
+
+## Task 2: Dashboard uses 224px navy sidebar (parity with Projects) ✅
+**Date:** 2026-06-15
+**Status:** Live at https://projects.sitedeck.pro (reload the dashboard)
+
+### Built
+- `frontend/src/components/ProjectSidebar.tsx` (NEW). Sibling to the cross-app `Sidebar`. Same navy `#1B2A4A`, 224px width, sticky, full-height. Nav is icon-only (per-project icons: Schedule, RFI, Comm, Meetings, Reports, Owner Reports, Lessons, Drawings, Equipment, WBS, Settings). Header slot is generic — the Dashboard hands in a project-switcher + home button + save-as-template control. ConnectedProducts and user-info footer are shared with the cross-app `Sidebar` (same `ConnectedProducts` component, same footer layout).
+- `frontend/src/components/Dashboard.tsx`. Replaced the 56px white icon rail with the new `<ProjectSidebar />`. The Top Nav is preserved but slimmed: removed the "SiteDeck PM" home button (now in the rail's header slot), the project switcher button + dropdown (now in the rail's header slot), the "Save as Template" button (now in the rail's header slot), the "Mr. Robert" user block (now in the rail's footer), and the orange "Sign Out" button (now in the rail's footer as an icon button). The search bar, owner-report-due chip, and alerts bell are kept in the top nav (real product features that don't belong in a sidebar).
+- `connectedProducts` is fetched from `/api/v1/health` on mount (best-effort, never throws). User info is read async from Firebase `currentUser`, with a dev-token fallback. Same pattern as Projects.
+
+### Bundle impact
+- `Dashboard-xt5rcUOC.js`: 157.94 kB → 160.38 kB (+2.44 kB). ProjectSidebar is bundled into the Dashboard chunk; the cross-app `Sidebar` is in the Projects chunk. No new top-level chunk.
+- `index-Bht2qa3X.js`: 53.31 kB (no material change — the new components are loaded only when their view is mounted).
+
+### Verification
+- `tsc --noEmit -p frontend/tsconfig.app.json` — clean
+- `npm run build` (frontend) — clean, 21 chunks, 33-entry precache (1337.71 KiB)
+- `npm test` — 1011/1022 pass; 11 failures are the pre-existing `bug_reports` table-absence failures. No new regressions.
+- `npm run deploy` — full pipeline succeeded
+- `curl https://projects.sitedeck.pro/api/v1/health` — still returns the `connectedProducts` field
+
+### Autonomous decisions
+- ProjectSidebar takes `navItems: ProjectNavItem[]` rather than baking in a nav array. The Dashboard's nav model is per-project (Schedule, RFI, etc.) and shouldn't entangle with the cross-app Sidebar's nav model (Projects, Portfolio, etc.). Same ConnectedProducts and footer code is shared via the existing `ConnectedProducts` component.
+- Kept the Top Nav for search + alerts + owner-report chip. Removing them would have required relocating them to the content area, which is a bigger UX change. The rail's "CONNECTED PRODUCTS" + sign-out + user footer now give PM the consistent Benchmark-style footer in both views.
+- Removed the duplicate "Mr. Robert" user block and the orange "Sign Out" button from the Top Nav. The sidebar's user footer is the canonical spot now.
