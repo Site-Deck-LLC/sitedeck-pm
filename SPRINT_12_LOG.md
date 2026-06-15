@@ -81,3 +81,13 @@ $ curl -s https://projects.sitedeck.pro/api/v1/health | jq .
 - ProjectSidebar takes `navItems: ProjectNavItem[]` rather than baking in a nav array. The Dashboard's nav model is per-project (Schedule, RFI, etc.) and shouldn't entangle with the cross-app Sidebar's nav model (Projects, Portfolio, etc.). Same ConnectedProducts and footer code is shared via the existing `ConnectedProducts` component.
 - Kept the Top Nav for search + alerts + owner-report chip. Removing them would have required relocating them to the content area, which is a bigger UX change. The rail's "CONNECTED PRODUCTS" + sign-out + user footer now give PM the consistent Benchmark-style footer in both views.
 - Removed the duplicate "Mr. Robert" user block and the orange "Sign Out" button from the Top Nav. The sidebar's user footer is the canonical spot now.
+
+### Follow-up: nav items are now icon+label (Benchmark pattern)
+**Date:** 2026-06-15
+**Status:** Live
+
+The Dashboard's per-project nav was icon-only with hover tooltips. The user pointed out that Benchmark has labels next to each icon and asked for parity.
+
+- `frontend/src/components/ProjectSidebar.tsx`. Nav rows are now flex rows: 16px icon (resized from the Dashboard's 20px icons via `cloneElement` — no icon re-authoring) + label text. Active state: `rgba(255,255,255,0.1)` background + white text. Inactive: `rgba(255,255,255,0.6)` text. Hover: `rgba(255,255,255,0.05)` background + white text. Padding: `10px 12px`. Border-radius: 6px. Same 224px sidebar width.
+
+Bundle: `index-Ci51g8FB.js`. No new chunk, no test regressions.

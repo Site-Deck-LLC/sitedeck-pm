@@ -12,7 +12,8 @@
  * shared with the PM Sidebar.
  */
 
-import type { ReactNode } from 'react';
+import type { ReactNode, ReactElement } from 'react';
+import { cloneElement, isValidElement } from 'react';
 import { ConnectedProducts, type ConnectedProductsState } from './ConnectedProducts';
 import { COLORS, FONTS } from '../styles/design-system';
 import { getCurrentRole } from '../auth';
@@ -32,6 +33,18 @@ interface Props {
   user?: SidebarUser | null;
   onLogout: () => void;
   connectedProducts?: ConnectedProductsState;
+}
+
+/**
+ * Resize an SVG icon (passed from outside) to the sidebar's 16px slot.
+ * The Dashboard's nav icons are authored at 20px (used elsewhere in the
+ * dashboard content); cloneElement overrides the width/height so they
+ * fit the Benchmark-pattern rail without re-authoring the icon set.
+ */
+function resizeIcon(icon: ReactNode, size: number): ReactNode {
+  if (!isValidElement(icon)) return icon;
+  const el = icon as ReactElement<{ width?: number | string; height?: number | string }>;
+  return cloneElement(el, { width: size, height: size });
 }
 
 export function ProjectSidebar({
@@ -66,7 +79,7 @@ export function ProjectSidebar({
       {/* Project context block (project name + switcher) */}
       {headerSlot}
 
-      {/* Icon nav */}
+      {/* Icon+label nav (Benchmark pattern) */}
       <nav
         style={{
           flex: 1,
@@ -84,17 +97,20 @@ export function ProjectSidebar({
                 title={item.label}
                 style={{
                   width: '100%',
-                  height: 40,
-                  borderRadius: 6,
-                  border: 'none',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 10,
+                  padding: '10px 12px',
+                  borderRadius: 6,
+                  border: 'none',
                   cursor: 'pointer',
                   background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
                   color: isActive ? COLORS.white : 'rgba(255,255,255,0.6)',
                   transition: 'background 0.15s, color 0.15s',
                   fontFamily: 'inherit',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  textAlign: 'left',
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
@@ -109,7 +125,27 @@ export function ProjectSidebar({
                   }
                 }}
               >
-                {item.icon}
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {resizeIcon(item.icon, 16)}
+                </span>
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.label}
+                </span>
               </button>
             );
           })}
