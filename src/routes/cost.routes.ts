@@ -69,4 +69,24 @@ router.get(
   })
 );
 
+router.get(
+  '/cashflow',
+  requireAuth,
+  requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.ACCOUNTANT_AP),
+  asyncHandler(async (req, res) => {
+    const result = await costService.getCashFlow(req.params.projectId);
+    res.json(result);
+  })
+);
+
+router.get(
+  '/forecasts',
+  requireAuth,
+  requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.ACCOUNTANT_AP),
+  asyncHandler(async (req, res) => {
+    const result = await costService.calculateForecasts(req.params.projectId);
+    res.json(result);
+  })
+);
+
 export default router;

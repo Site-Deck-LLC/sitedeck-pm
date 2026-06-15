@@ -7,6 +7,7 @@
  *
  * The allowlist is intentionally narrow:
  *   - https://projects.sitedeck.pro (same-origin, always allowed)
+ *   - https://ops.sitedeck.pro (Sprint 12: ops console subdomain)
  *   - https://benchmark.sitedeck.pro (cross-origin from Benchmark)
  *   - https://pro.sitedeck.pro (reserved for future Pro Get Help)
  *   - https://design.sitedeck.pro (reserved for future Design Get Help)
@@ -21,6 +22,7 @@ import { Request, Response, NextFunction } from 'express';
 
 const ALLOWED_ORIGINS = new Set<string>([
   'https://projects.sitedeck.pro',
+  'https://ops.sitedeck.pro',
   'https://benchmark.sitedeck.pro',
   'https://pro.sitedeck.pro',
   'https://design.sitedeck.pro',

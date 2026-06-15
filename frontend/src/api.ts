@@ -190,6 +190,30 @@ export function markAllNotificationsRead() {
   return fetchApi<{ updated: number }>('/api/v1/notifications/mark-all-read', { method: 'POST' });
 }
 
+// ── Notification preferences (Sprint 12 Task 8) ──
+export interface NotificationPreferences {
+  userId: string;
+  emailEnabled: boolean;
+  pushEnabled: boolean;
+  digestEnabled: boolean;
+  quietStart: string;
+  quietEnd: string;
+  kindOverrides: Record<string, { email?: boolean | null; push?: boolean | null }>;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export function getNotificationPreferences() {
+  return fetchApi<NotificationPreferences>('/api/v1/notifications/preferences/me');
+}
+
+export function updateNotificationPreferences(body: Partial<NotificationPreferences>) {
+  return fetchApi<NotificationPreferences>('/api/v1/notifications/preferences/me', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
 export interface Notification {
   id: string;
   userId: string;
@@ -336,6 +360,32 @@ export function getBudgetLines(projectId: string) {
 
 export function getEvm(projectId: string) {
   return fetchApi(`/api/v1/projects/${projectId}/cost/evm`);
+}
+
+export interface EvmForecasts {
+  projectId: string;
+  bac: number;
+  ev: number;
+  ac: number;
+  pv: number;
+  cpi: number;
+  spi: number;
+  tcpi: number;
+  tcpiFlag: 'tight' | 'on_pace' | 'cushion' | 'unknown';
+  eac_cpi: number;
+  eac_spi: number;
+  eac_replan: number;
+  vac: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  forecastCompleteDate: string | null;
+  baselineCompleteDate: string | null;
+  completeDateDeltaDays: number | null;
+  confidenceRange: { optimistic: number; mostLikely: number; pessimistic: number };
+}
+
+export function getEvmForecasts(projectId: string) {
+  return fetchApi<EvmForecasts>(`/api/v1/projects/${projectId}/cost/forecasts`);
 }
 
 export function getCashFlow(projectId: string) {
@@ -581,4 +631,8 @@ export function getSubmittalLogPdfUrl(projectId: string): string {
 
 export function getChangeOrderPdfUrl(projectId: string, coId: string): string {
   return withToken(`/api/v1/projects/${projectId}/scope/change-orders/${coId}/pdf`);
+}
+
+export function getAsBuiltPdfUrl(projectId: string): string {
+  return withToken(`/api/v1/projects/${projectId}/redlines/as-built-pdf`);
 }

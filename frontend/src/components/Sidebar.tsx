@@ -17,6 +17,7 @@
 import { ConnectedProducts, type ConnectedProductsState } from './ConnectedProducts';
 import { COLORS, FONTS } from '../styles/design-system';
 import { getCurrentRole } from '../auth';
+import { isOps } from '../branding';
 
 export type SidebarView = 'projects' | 'templates' | 'portfolio' | 'billing' | 'admin';
 
@@ -30,7 +31,6 @@ interface NavItem {
   label: string;
   icon: string; // simple SVG path
   adminOnly?: boolean;
-  show?: boolean; // explicit "this button is enabled" gate
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -114,10 +114,10 @@ export function Sidebar({
           SiteDeck
         </div>
         <div style={{ color: COLORS.orange, fontWeight: 700, fontSize: 18, lineHeight: 1.2 }}>
-          PM
+          {isOps ? 'Ops' : 'PM'}
         </div>
         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>
-          Project Management
+          {isOps ? 'Operations Console' : 'Project Management'}
         </div>
       </div>
 

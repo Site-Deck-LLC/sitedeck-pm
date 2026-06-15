@@ -28,6 +28,7 @@ import projectTemplatesRouter from './project-templates.routes';
 import documentsRouter from './documents.routes';
 import portfolioRouter from './portfolio.routes';
 import notificationsRouter from './notifications.routes';
+import notificationPreferencesRouter from './notification-preferences.routes';
 import redlinesRouter from './redlines.routes';
 import teamRouter from './team.routes';
 import pushRouter from './push.routes';
@@ -36,6 +37,8 @@ import subcontractMilestonesRouter from './subcontract-milestones.routes';
 import adminRouter from './admin.routes';
 import supportRouter from './support.routes';
 import bugApprovalRouter from './bug-approval.routes';
+import { quickbooksRouter, quickbooksProjectRouter } from './quickbooks.routes';
+import subSchedulesRouter from './sub-schedules.routes';
 
 const router = Router();
 
@@ -65,6 +68,7 @@ router.use('/webhooks', webhookRouter);
 router.use('/templates', templatesRouter);
 router.use('/portfolio', portfolioRouter);
 router.use('/notifications', notificationsRouter);
+router.use('/notifications/preferences', notificationPreferencesRouter);
 router.use('/users', pushRouter);
 router.use('/projects/:projectId/redlines', redlinesRouter);
 router.use('/projects/:projectId/team', teamRouter);
@@ -73,6 +77,9 @@ router.use('/projects/:projectId/subcontract-milestones', subcontractMilestonesR
 router.use('/admin', adminRouter);
 router.use('/support', supportRouter);
 router.use('/bug-approval', bugApprovalRouter);
+router.use('/integrations/quickbooks', quickbooksRouter);
+router.use('/projects/:projectId/integrations/quickbooks', quickbooksProjectRouter);
+router.use('/projects/:projectId/sub-schedules', subSchedulesRouter);
 
 // Organization routes (top-level — Sprint 9 Task 6)
 router.get('/organizations/:orgId', requireAuth, asyncHandler(async (req, res) => {

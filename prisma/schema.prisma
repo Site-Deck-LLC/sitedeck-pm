@@ -910,6 +910,36 @@ model Notification {
   @@map("notifications")
 }
 
+// Sprint 12: Per-user notification preferences. One row per user.
+// In-app is always delivered (the bell is a core product surface).
+// Email + push are opt-in per kind. Quiet hours and digest are global
+// toggles. Defaults: email on for transactional kinds (CO approval,
+// drawing IFC, RFI assigned), push on for the same, everything else
+// off — matches the existing notifications.service.ts kind list.
+model NotificationPreferences {
+  userId           String   @id @map("user_id")
+  // per-kind toggles. Each kind in NotificationKind has matching
+  // *_inapp/_email/_push columns. Defaults are applied at row-create
+  // time by the service so an empty JSON object means "use defaults".
+  // (We store the full object to keep the schema flat and avoid a
+  // child table for a 9-key config.)
+  emailEnabled     Boolean  @default(true) @map("email_enabled")
+  pushEnabled      Boolean  @default(false) @map("push_enabled")
+  digestEnabled    Boolean  @default(false) @map("digest_enabled")
+  // Quiet hours in user's local time. Stored as "HH:MM" 24h strings.
+  // Empty string = no quiet hours.
+  quietStart       String   @default("") @map("quiet_start")
+  quietEnd         String   @default("") @map("quiet_end")
+  // Per-kind override map. JSON. Key = NotificationKind, value =
+  // { email?: bool, push?: bool }. Absent key = use the global default.
+  // Example: { "schedule_risk": { "email": true, "push": true } }.
+  kindOverrides    Json?    @map("kind_overrides")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("notification_preferences")
+}
+
 // ============================================================================
 // SiteDeck Ops — Sprint 10
 // ============================================================================
@@ -1048,4 +1078,94 @@ model CompoundRisk {
   @@index([projectId, detectedAt])
   @@index([resolvedAt])
   @@map("compound_risks")
+}
+
+// ─── Sprint 12: Sub-schedule hierarchy ─────────────────────────────────────
+// Master schedule lives in ScheduleActivity. Sub-schedules are owned
+// by a subcontract and roll up to the project for portfolio views.
+
+model SubSchedule {
+  id                 String   @id @default(cuid())
+  projectId          String   @map("project_id")
+  subcontractId      String   @map("subcontract_id")
+  name               String
+  description        String?
+  baselineStartDate  DateTime? @map("baseline_start_date")
+  baselineEndDate    DateTime? @map("baseline_end_date")
+  createdBy          String   @map("created_by")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  activities SubScheduleActivity[]
+
+  @@index([projectId])
+  @@index([subcontractId])
+  @@map("sub_schedules")
+}
+
+model SubScheduleActivity {
+  id                   String   @id @default(cuid())
+  subScheduleId        String   @map("sub_schedule_id")
+  subSchedule          SubSchedule @relation(fields: [subScheduleId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String?
+  plannedStart         DateTime? @map("planned_start")
+  plannedEnd           DateTime? @map("planned_end")
+  actualStart          DateTime? @map("actual_start")
+  actualEnd            DateTime? @map("actual_end")
+  percentComplete      Decimal  @default(0) @map("percent_complete") @db.Decimal(5, 2)
+  linkedMasterActivityId String? @map("linked_master_activity_id")
+  status               String   @default("pending")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([subScheduleId])
+  @@index([linkedMasterActivityId])
+  @@map("sub_schedule_activities")
+}
+
+// ─── Sprint 12: QuickBooks integration ──────────────────────────────────────
+// QuickBooks is the accounting tool of record. PM only exports — no
+// accounting happens here. Each row represents one OAuth-linked realm
+// (typically one QBO company per contractor).
+
+model QuickBooksToken {
+  id           String   @id @default(cuid())
+  // The QBO company/realm id. Unique because one PM instance links
+  // to exactly one QBO company at a time.
+  realmId      String   @unique @map("realm_id")
+  accessToken  String   @map("access_token")
+  refreshToken String   @map("refresh_token")
+  // ISO timestamp at which accessToken expires (QBO access tokens
+  // last 1 hour). The service refreshes proactively when within
+  // 5 minutes of expiry.
+  expiresAt    DateTime @map("expires_at")
+  // OAuth scopes (e.g. "com.intuit.quickbooks.accounting") captured
+  // at connect time, for display in the UI.
+  scope        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("quickbooks_tokens")
+}
+
+// One row per change order exported to QuickBooks. Idempotency: when
+// a CO is exported twice, we look up by (projectId, changeOrderId)
+// and return the existing QBO invoice id rather than create a
+// duplicate. This is the architectural rule that keeps accounting
+// happy.
+model QuickBooksExport {
+  id                String   @id @default(cuid())
+  projectId         String   @map("project_id")
+  changeOrderId     String   @map("change_order_id")
+  qboInvoiceId      String   @map("qbo_invoice_id")
+  qboInvoiceNumber  String?  @map("qbo_invoice_number")
+  // The QBO customer id we mapped the project client to.
+  qboCustomerId     String?  @map("qbo_customer_id")
+  exportedAt        DateTime @default(now()) @map("exported_at")
+  exportedBy        String   @map("exported_by")
+
+  @@unique([projectId, changeOrderId])
+  @@index([projectId])
+  @@map("quickbooks_exports")
 }

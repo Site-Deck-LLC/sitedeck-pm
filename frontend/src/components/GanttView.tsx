@@ -1,6 +1,9 @@
-import { useEffect, useState, useMemo } from 'react';
-import { getScheduleActivities, getScheduleBaselines } from '../api';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { getScheduleActivities, getScheduleBaselines, getScheduleRelationships } from '../api';
+import { SubSchedulePanel } from './SubSchedulePanel';
 import { COLORS, FONTS, SHADOWS, BORDERS } from '../styles/design-system';
+import { ScheduleImportDialog } from './ScheduleImportDialog';
+import { ActivityDetailDrawer } from './ActivityDetailDrawer';
 
 interface Activity {
   id: string;
@@ -21,6 +24,16 @@ interface Activity {
   freeFloat: number | null;
 }
 
+interface Relationship {
+  id: string;
+  predecessorId: string;
+  successorId: string;
+  relationshipType: string;
+  lagDays: number;
+  predecessor: { id: string; name: string };
+  successor: { id: string; name: string };
+}
+
 interface BaselineActivity {
   id?: string;
   name?: string;
@@ -38,13 +51,18 @@ interface Baseline {
 }
 
 type ViewMode = 'graph' | 'table';
+type ZoomMode = 'week' | 'month' | 'quarter';
 
 const NAME_COL_W = 280;
 const ROW_H = 44;
 const GROUP_HEADER_H = 40;
 const HEADER_H = 48;
-const MIN_DAY_W = 2;
-const MAX_DAY_W = 8;
+
+const ZOOM_DAY_WIDTH: Record<ZoomMode, number> = {
+  week: 24,
+  month: 6,
+  quarter: 2,
+};
 
 export function GanttView({
   projectId,
@@ -54,19 +72,25 @@ export function GanttView({
   onBack: () => void;
 }) {
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [baselines, setBaselines] = useState<Baseline[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
+  const [zoomMode, setZoomMode] = useState<ZoomMode>('month');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const [acts, bls] = await Promise.all([
+        const [acts, rels, bls] = await Promise.all([
           getScheduleActivities(projectId),
+          getScheduleRelationships(projectId).catch(() => []),
           getScheduleBaselines(projectId),
         ]);
         setActivities(acts);
+        setRelationships(rels || []);
         setBaselines(bls || []);
       } catch (err: any) {
         setError(err.message);
@@ -92,19 +116,57 @@ export function GanttView({
           </span>
         </div>
 
-        {/* View Toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, background: COLORS.navyDark, borderRadius: BORDERS.radius.sm, padding: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Zoom Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, background: COLORS.navyDark, borderRadius: BORDERS.radius.sm, padding: 2 }}>
+            {(['week', 'month', 'quarter'] as ZoomMode[]).map((z) => (
+              <button
+                key={z}
+                onClick={() => setZoomMode(z)}
+                style={zoomButtonStyle(zoomMode === z)}
+              >
+                {z === 'week' ? 'Week' : z === 'month' ? 'Month' : 'Quarter'}
+              </button>
+            ))}
+          </div>
+
+          {/* View Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, background: COLORS.navyDark, borderRadius: BORDERS.radius.sm, padding: 2 }}>
+            <button
+              onClick={() => setViewMode('graph')}
+              style={toggleButtonStyle(viewMode === 'graph')}
+            >
+              Graph
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              style={toggleButtonStyle(viewMode === 'table')}
+            >
+              Table
+            </button>
+          </div>
+
+          {/* Import Button */}
           <button
-            onClick={() => setViewMode('graph')}
-            style={toggleButtonStyle(viewMode === 'graph')}
+            onClick={() => setShowImport(true)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: BORDERS.radius.sm,
+              border: `1px solid ${COLORS.orange}`,
+              background: 'transparent',
+              color: COLORS.orange,
+              fontSize: FONTS.size.sm,
+              fontWeight: FONTS.weight.semibold,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
           >
-            Graph
-          </button>
-          <button
-            onClick={() => setViewMode('table')}
-            style={toggleButtonStyle(viewMode === 'table')}
-          >
-            Table
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Import
           </button>
         </div>
       </nav>
@@ -134,19 +196,75 @@ export function GanttView({
             </button>
           </div>
         ) : viewMode === 'graph' ? (
-          <GanttChart activities={activities} baselines={baselines} />
+          <GanttChart
+            activities={activities}
+            baselines={baselines}
+            relationships={relationships}
+            zoomMode={zoomMode}
+            onActivityClick={setSelectedActivityId}
+          />
         ) : (
-          <TableView activities={activities} />
+          <TableView activities={activities} onActivityClick={setSelectedActivityId} />
         )}
       </div>
+
+      {showImport && (
+        <ScheduleImportDialog
+          projectId={projectId}
+          onClose={() => setShowImport(false)}
+          onSuccess={() => {
+            setShowImport(false);
+            async function reload() {
+              try {
+                setLoading(true);
+                const [acts, rels, bls] = await Promise.all([
+                  getScheduleActivities(projectId),
+                  getScheduleRelationships(projectId).catch(() => []),
+                  getScheduleBaselines(projectId),
+                ]);
+                setActivities(acts);
+                setRelationships(rels || []);
+                setBaselines(bls || []);
+              } catch (err: any) {
+                setError(err.message);
+              } finally {
+                setLoading(false);
+              }
+            }
+            reload();
+          }}
+        />
+      )}
+
+      <ActivityDetailDrawer
+        projectId={projectId}
+        activityId={selectedActivityId}
+        onClose={() => setSelectedActivityId(null)}
+        onNavigate={(id) => setSelectedActivityId(id)}
+      />
+      <SubSchedulePanel projectId={projectId} />
     </div>
   );
 }
 
 // ── Gantt Chart ──
 
-function GanttChart({ activities, baselines }: { activities: Activity[]; baselines: Baseline[] }) {
+function GanttChart({
+  activities,
+  baselines,
+  relationships,
+  zoomMode,
+  onActivityClick,
+}: {
+  activities: Activity[];
+  baselines: Baseline[];
+  relationships: Relationship[];
+  zoomMode: ZoomMode;
+  onActivityClick: (id: string) => void;
+}) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dayWidth = ZOOM_DAY_WIDTH[zoomMode];
 
   // Latest baseline for comparison
   const latestBaseline = useMemo(() => {
@@ -179,21 +297,23 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
   }, [activities]);
 
   // Timeline bounds
-  const { minDate, maxDate, totalDays, dayWidth } = useMemo(() => {
+  const { minDate, maxDate, totalDays } = useMemo(() => {
     if (!activities.length) {
       const now = new Date();
-      return { minDate: now, maxDate: now, totalDays: 1, dayWidth: MAX_DAY_W };
+      return { minDate: now, maxDate: now, totalDays: 1 };
     }
     const dates = activities.flatMap(a => [new Date(a.startDate), new Date(a.endDate)]);
     const min = new Date(Math.min(...dates.map(d => d.getTime())));
+    min.setHours(0, 0, 0, 0);
     const max = new Date(Math.max(...dates.map(d => d.getTime())));
+    max.setHours(0, 0, 0, 0);
     const days = Math.ceil((max.getTime() - min.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const dw = Math.max(MIN_DAY_W, Math.min(MAX_DAY_W, 1200 / days));
-    return { minDate: min, maxDate: max, totalDays: days, dayWidth: dw };
+    return { minDate: min, maxDate: max, totalDays: days };
   }, [activities]);
 
   const todayOffset = useMemo(() => {
     const now = new Date();
+    now.setHours(0, 0, 0, 0);
     if (now < minDate) return -1;
     return Math.ceil((now.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
   }, [minDate]);
@@ -211,6 +331,61 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
 
   const timelineWidth = totalDays * dayWidth;
 
+  // Build a map of activity positions for dependency arrows
+  const activityPositions = useMemo(() => {
+    const pos = new Map<string, { x: number; y: number }>();
+    let y = 0;
+    for (const [category, acts] of groups) {
+      y += GROUP_HEADER_H; // group header height
+      if (collapsed.has(category)) continue;
+      for (const act of acts) {
+        const barLeft = Math.ceil((new Date(act.startDate).getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) * dayWidth;
+        const barWidth = Math.max(2, act.duration * dayWidth);
+        pos.set(act.id, {
+          x: barLeft + barWidth,
+          y: y + ROW_H / 2,
+        });
+        y += ROW_H;
+      }
+    }
+    return pos;
+  }, [groups, collapsed, minDate, dayWidth]);
+
+  const getActivityEntryY = useCallback((actId: string) => {
+    let y = 0;
+    for (const [category, acts] of groups) {
+      y += GROUP_HEADER_H;
+      if (collapsed.has(category)) continue;
+      for (const act of acts) {
+        if (act.id === actId) {
+          return y + ROW_H / 2;
+        }
+        y += ROW_H;
+      }
+    }
+    return null;
+  }, [groups, collapsed]);
+
+  // Total height of all rows for SVG overlay
+  const totalContentHeight = useMemo(() => {
+    let h = 0;
+    for (const [category, acts] of groups) {
+      h += GROUP_HEADER_H;
+      if (!collapsed.has(category)) {
+        h += acts.length * ROW_H;
+      }
+    }
+    return h;
+  }, [groups, collapsed]);
+
+  const getBarLeft = useCallback((act: Activity) => {
+    return Math.ceil((new Date(act.startDate).getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) * dayWidth;
+  }, [minDate, dayWidth]);
+
+  const getBarWidth = useCallback((act: Activity) => {
+    return Math.max(2, act.duration * dayWidth);
+  }, [dayWidth]);
+
   function toggleGroup(cat: string) {
     setCollapsed(prev => {
       const next = new Set(prev);
@@ -221,19 +396,23 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
   }
 
   function getBarColor(act: Activity): string {
-    if (act.isCritical) return COLORS.red;
-    if (act.status === 'complete') return COLORS.green;
-    if (act.status === 'in_progress') return COLORS.orange;
-    if (act.status === 'delayed') return COLORS.red;
-    return COLORS.gray300;
+    if (act.status === 'complete') return '#9CA3AF';
+    if (act.status === 'in_progress' && !act.isCritical) return '#22C55E';
+    if (act.status === 'in_progress' && act.isCritical) return '#F59E0B';
+    if (act.status === 'delayed') return '#EF4444';
+    if (act.isCritical) return '#EF4444';
+    return COLORS.navy;
   }
 
-  function getBarLeft(act: Activity): number {
-    return Math.ceil((new Date(act.startDate).getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) * dayWidth;
+  function getBarBorder(act: Activity): string | undefined {
+    if (act.isCritical) return `3px solid #EF4444`;
+    if (act.status === 'not_started') return `2px solid ${COLORS.navy}`;
+    return undefined;
   }
 
-  function getBarWidth(act: Activity): number {
-    return Math.max(2, act.duration * dayWidth);
+  function getBarBackground(act: Activity): string {
+    if (act.status === 'not_started') return 'transparent';
+    return getBarColor(act);
   }
 
   return (
@@ -302,7 +481,7 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
       </div>
 
       {/* Scrollable body */}
-      <div style={{ maxHeight: 'calc(100vh - 200px)', overflow: 'auto' }}>
+      <div ref={scrollRef} style={{ maxHeight: 'calc(100vh - 200px)', overflow: 'auto', position: 'relative' }}>
         {groups.map(([category, acts]) => {
           const isCollapsed = collapsed.has(category);
           return (
@@ -336,6 +515,8 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
                 const barLeft = getBarLeft(act);
                 const barWidth = getBarWidth(act);
                 const color = getBarColor(act);
+                const border = getBarBorder(act);
+                const bg = getBarBackground(act);
                 const baselineAct = baselineMap.get(act.id) || baselineMap.get(act.name);
                 const hasBaseline = baselineAct && baselineAct.startDate && baselineAct.endDate;
                 const baselineLeft = hasBaseline
@@ -410,7 +591,7 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
                               width: baselineWidth,
                               height: 3,
                               borderRadius: 2,
-                              background: COLORS.textMuted,
+                              background: COLORS.navy,
                               opacity: 0.6,
                               zIndex: 1,
                             }}
@@ -418,53 +599,59 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
                           />
                         )}
 
-                        {/* Actual bar */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: barLeft,
-                            top: 10,
-                            width: Math.max(barWidth, 3),
-                            height: act.isMilestone ? 20 : 18,
-                            borderRadius: act.isMilestone ? '50%' : 4,
-                            background: color,
-                            opacity: act.status === 'not_started' ? 0.55 : 1,
-                            cursor: 'pointer',
-                            transition: 'opacity 0.15s',
-                            zIndex: 2,
-                          }}
-                          title={`${act.name}: ${act.startDate.slice(0, 10)} → ${act.endDate.slice(0, 10)} (${Math.round(act.percentComplete * 100)}%)${act.isCritical ? ' — CRITICAL' : ''}`}
-                        >
-                          {/* Progress fill */}
-                          {!act.isMilestone && act.percentComplete > 0 && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                left: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: `${act.percentComplete * 100}%`,
-                                borderRadius: '4px 0 0 4px',
-                                background: 'rgba(255,255,255,0.4)',
-                              }}
-                            />
-                          )}
-                          {/* Milestone diamond */}
-                          {act.isMilestone && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                left: '50%',
-                                top: '50%',
-                                transform: 'translate(-50%, -50%) rotate(45deg)',
-                                width: 14,
-                                height: 14,
-                                background: COLORS.navy,
-                                border: `2px solid ${COLORS.white}`,
-                              }}
-                            />
-                          )}
-                        </div>
+                        {/* Actual bar or milestone diamond */}
+                        {act.isMilestone ? (
+                          <div
+                            onClick={() => onActivityClick(act.id)}
+                            style={{
+                              position: 'absolute',
+                              left: barLeft - 8,
+                              top: 10,
+                              width: 16,
+                              height: 16,
+                              transform: 'rotate(45deg)',
+                              background: color,
+                              border: `2px solid ${COLORS.white}`,
+                              zIndex: 3,
+                              cursor: 'pointer',
+                            }}
+                            title={`${act.name}: ${act.startDate.slice(0, 10)} (Milestone)`}
+                          />
+                        ) : (
+                          <div
+                            onClick={() => onActivityClick(act.id)}
+                            style={{
+                              position: 'absolute',
+                              left: barLeft,
+                              top: 10,
+                              width: Math.max(barWidth, 3),
+                              height: 18,
+                              borderRadius: 4,
+                              background: bg,
+                              border: border,
+                              opacity: act.status === 'not_started' ? 0.7 : 1,
+                              cursor: 'pointer',
+                              transition: 'opacity 0.15s',
+                              zIndex: 2,
+                            }}
+                            title={`${act.name}: ${act.startDate.slice(0, 10)} → ${act.endDate.slice(0, 10)} (${Math.round(act.percentComplete * 100)}%)${act.isCritical ? ' — CRITICAL' : ''}`}
+                          >
+                            {/* Progress fill */}
+                            {act.percentComplete > 0 && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: `${act.percentComplete * 100}%`,
+                                  borderRadius: '4px 0 0 4px',
+                                  background: 'rgba(255,255,255,0.4)',
+                                }}
+                              />
+                            )}
+                          </div>
+                        )}
 
                         {/* Percent label */}
                         {act.percentComplete > 0 && !act.isMilestone && (
@@ -491,14 +678,67 @@ function GanttChart({ activities, baselines }: { activities: Activity[]; baselin
           );
         })}
 
+        {/* Dependency arrows overlay (SVG) */}
+        {relationships.length > 0 && (
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: NAME_COL_W,
+              width: timelineWidth,
+              height: totalContentHeight,
+              pointerEvents: 'none',
+              zIndex: 4,
+              overflow: 'visible',
+            }}
+          >
+            {relationships.map((rel) => {
+              const predPos = activityPositions.get(rel.predecessorId);
+              const succY = getActivityEntryY(rel.successorId);
+              if (!predPos || succY === null) return null;
+
+              // Find successor start X
+              const succAct = activities.find(a => a.id === rel.successorId);
+              if (!succAct) return null;
+              const succX = getBarLeft(succAct);
+
+              const startX = predPos.x;
+              const startY = predPos.y;
+              const endX = succX;
+              const endY = succY;
+
+              // Draw curved path: right from predecessor end, then down/up, then left into successor start
+              const midX = startX + 10;
+              const path = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+
+              return (
+                <g key={rel.id}>
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke={COLORS.textMuted}
+                    strokeWidth={1}
+                    strokeDasharray={rel.relationshipType !== 'FS' ? '3 3' : undefined}
+                  />
+                  <polygon
+                    points={`${endX},${endY} ${endX - 5},${endY - 3} ${endX - 5},${endY + 3}`}
+                    fill={COLORS.textMuted}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        )}
+
         {/* Legend */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '12px 16px', borderTop: `1px solid ${COLORS.gray200}`, background: COLORS.offWhite }}>
           <span style={{ fontSize: FONTS.size.xs, fontWeight: FONTS.weight.semibold, color: COLORS.textSecondary, textTransform: 'uppercase' }}>Legend:</span>
-          <LegendItem color={COLORS.green} label="Complete" />
-          <LegendItem color={COLORS.orange} label="In Progress" />
-          <LegendItem color={COLORS.red} label="Critical / Delayed" />
-          <LegendItem color={COLORS.gray300} label="Not Started" />
-          <LegendItem color={COLORS.textMuted} label="Baseline" />
+          <LegendItem color="#9CA3AF" label="Complete" />
+          <LegendItem color="#22C55E" label="On Track" />
+          <LegendItem color="#F59E0B" label="Delayed" />
+          <LegendItem color="#EF4444" label="Critical" />
+          <LegendItem color={COLORS.navy} label="Not Started" />
+          <LegendItem color={COLORS.navy} label="Baseline" />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 2, height: 14, background: COLORS.orange }} />
             <span style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>Today</span>
@@ -520,7 +760,7 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 
 // ── Table View ──
 
-function TableView({ activities }: { activities: Activity[] }) {
+function TableView({ activities, onActivityClick }: { activities: Activity[]; onActivityClick: (id: string) => void }) {
   return (
     <div style={tableCardStyle}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: FONTS.size.sm }}>
@@ -539,7 +779,11 @@ function TableView({ activities }: { activities: Activity[] }) {
         </thead>
         <tbody>
           {activities.map((act) => (
-            <tr key={act.id} style={{ borderBottom: `1px solid ${COLORS.gray100}` }}>
+            <tr
+              key={act.id}
+              onClick={() => onActivityClick(act.id)}
+              style={{ borderBottom: `1px solid ${COLORS.gray100}`, cursor: 'pointer' }}
+            >
               <td style={tdStyle}>
                 <div style={{ fontWeight: FONTS.weight.medium, color: COLORS.textPrimary }}>{act.name}</div>
                 {act.isMilestone && <span style={{ fontSize: FONTS.size.xs, color: COLORS.orange }}>Milestone</span>}
@@ -637,6 +881,21 @@ function toggleButtonStyle(active: boolean): React.CSSProperties {
   };
 }
 
+function zoomButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '5px 12px',
+    borderRadius: BORDERS.radius.sm,
+    border: 'none',
+    background: active ? COLORS.orange : 'transparent',
+    color: COLORS.white,
+    fontSize: FONTS.size.xs,
+    fontWeight: active ? FONTS.weight.semibold : FONTS.weight.medium,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    textTransform: 'capitalize',
+  };
+}
+
 const contentStyle: React.CSSProperties = {
   maxWidth: 1400,
   margin: '0 auto',
@@ -649,6 +908,7 @@ const chartCardStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.gray200}`,
   boxShadow: SHADOWS.md,
   overflow: 'hidden',
+  position: 'relative',
 };
 
 const tableCardStyle: React.CSSProperties = {

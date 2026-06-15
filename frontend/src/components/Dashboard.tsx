@@ -27,6 +27,7 @@ import { RfiDetailView } from './RfiDetailView';
 import { SubmittalDetailView } from './SubmittalDetailView';
 import { ChangeOrderDetailView } from './ChangeOrderDetailView';
 import { RiskIntelligencePanel } from './RiskIntelligencePanel';
+import { ForecastCard } from './ForecastCard';
 import { ProjectSidebar, type ProjectNavItem } from './ProjectSidebar';
 import type { ConnectedProductsState } from './ConnectedProducts';
 import type { SidebarUser } from './Sidebar';
@@ -1007,6 +1008,9 @@ export function Dashboard({
                   </div>
                 </Card>
               </div>
+
+              {/* ── Row 2b: EVM Forecasts (full width) — Sprint 12 Task 7 ── */}
+              <ForecastCard projectId={projectId} />
 
               {/* ── Row 3: Cash Flow (60%) | Change Orders (40%) ── */}
               <div style={rowStyle(2, '3fr 2fr')}>

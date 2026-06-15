@@ -759,3 +759,316 @@ export async function buildOwnerReportPdf(data: OwnerReportPdfInput): Promise<Bu
   drawFooter(doc, `Owner Report — Week ending ${data.weekEnding}`);
   return collectBuffer(doc);
 }
+
+// ─── As-Built Drawing Record PDF ────────────────────────────────────────────
+
+export interface AsBuiltRedlineEntry {
+  redlineId: string;
+  description: string;
+  redlineType: string;
+  submittedBy: string;
+  submittedAt: Date | string;
+  status: string;
+  reviewNotes: string | null;
+  // True if the redline was submitted AFTER the document was marked IFC —
+  // i.e. an inspector locked the drawing, then a field user flagged it.
+  // Sprint 12 spec calls for an amber warning in the PDF when this is true.
+  submittedAfterLock: boolean;
+}
+
+export interface AsBuiltDrawingEntry {
+  documentId: string;
+  drawingNo: string | null;
+  name: string;
+  discipline: string;
+  // The current revision number released as IFC, or null if never released.
+  currentRevisionNo: number | null;
+  ifcReleasedAt: Date | string | null;
+  // Inspections are out-of-V1-scope; the as-built PDF surfaces only
+  // redlines + IFC metadata. Inspections live in Benchmark.
+  redlines: AsBuiltRedlineEntry[];
+}
+
+export interface AsBuiltPdfInput {
+  projectName: string;
+  preparedBy: string;
+  exportDate: Date | string;
+  projectStart: Date | string | null;
+  drawings: AsBuiltDrawingEntry[];
+}
+
+/**
+ * As-Built Drawing Record
+ * ------------------------
+ * Compiles a project's drawing-by-drawing record of IFC releases and any
+ * field redlines submitted against them. Used as a one-click deliverable
+ * at project closeout. Each drawing is grouped under its discipline; any
+ * redline flagged as submitted-after-lock is rendered with an amber
+ * warning so reviewers can chase it before signing off.
+ *
+ * Sections (always present):
+ *   1. Cover (project name, "As-Built Drawing Record", export date, PM name)
+ *   2. Summary (counts of drawings, drawings-with-redlines, period)
+ *   3. Drawing-by-drawing record (grouped by discipline)
+ *   4. Certification block
+ */
+export async function buildAsBuiltPdf(data: AsBuiltPdfInput): Promise<Buffer> {
+  const doc = createDoc({ size: 'LETTER', margin: MARGIN, bufferPages: true });
+  attachHeader(doc, 'As-Built Drawing Record');
+
+  // ── Cover ────────────────────────────────────────────────────────────────
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(28)
+    .fillColor(COLORS.navy)
+    .text('As-Built Drawing Record', MARGIN, 120);
+
+  doc
+    .font('Helvetica')
+    .fontSize(14)
+    .fillColor(COLORS.text)
+    .text(data.projectName, MARGIN, 160);
+
+  doc
+    .font('Helvetica')
+    .fontSize(12)
+    .fillColor(COLORS.muted)
+    .text(`Export date: ${formatDate(data.exportDate)}`, MARGIN, 184);
+  doc
+    .font('Helvetica')
+    .fontSize(12)
+    .fillColor(COLORS.muted)
+    .text(`Prepared by: ${data.preparedBy}`, MARGIN, 202);
+
+  // Big orange divider
+  doc
+    .moveTo(MARGIN, 230)
+    .lineTo(MARGIN + 100, 230)
+    .lineWidth(3)
+    .strokeColor(COLORS.orange)
+    .stroke();
+
+  // Cover note
+  doc
+    .font('Helvetica-Oblique')
+    .fontSize(10)
+    .fillColor(COLORS.muted)
+    .text(
+      'Compiled from IFC releases and field redlines logged in SiteDeck PM.',
+      MARGIN,
+      252,
+      { width: CONTENT_WIDTH }
+    );
+
+  // ── Page 2: Summary ─────────────────────────────────────────────────────
+  doc.addPage();
+  doc.y = sectionHeading(doc, 'Summary', 80);
+
+  const totalDrawings = data.drawings.length;
+  const drawingsWithRedlines = data.drawings.filter((d) => d.redlines.length > 0).length;
+  const drawingsWithoutRedlines = totalDrawings - drawingsWithRedlines;
+  const totalRedlines = data.drawings.reduce((acc, d) => acc + d.redlines.length, 0);
+
+  // Metric tile row
+  const tiles: Array<{ label: string; value: string; color?: string }> = [
+    { label: 'DRAWINGS REFERENCED', value: String(totalDrawings) },
+    {
+      label: 'WITH REDLINES',
+      value: String(drawingsWithRedlines),
+      color: drawingsWithRedlines > 0 ? '#D68A00' : COLORS.navy,
+    },
+    {
+      label: 'WITHOUT REDLINES',
+      value: String(drawingsWithoutRedlines),
+      color: '#22A06B',
+    },
+    { label: 'TOTAL REDLINES', value: String(totalRedlines) },
+  ];
+  const tileWidth = CONTENT_WIDTH / Math.max(tiles.length, 1);
+  let tx = MARGIN;
+  for (const t of tiles) {
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(22)
+      .fillColor(t.color || COLORS.navy)
+      .text(t.value, tx, doc.y, { width: tileWidth - 8, lineBreak: false });
+    doc
+      .font('Helvetica')
+      .fontSize(8)
+      .fillColor(COLORS.muted)
+      .text(t.label, tx, doc.y + 4, { width: tileWidth - 8, lineBreak: false });
+    tx += tileWidth;
+  }
+  doc.y += 38;
+
+  // Export period
+  doc.y = sectionHeading(doc, 'Export Period', doc.y);
+  doc
+    .font('Helvetica')
+    .fontSize(11)
+    .fillColor(COLORS.text)
+    .text(
+      `Project start: ${formatDate(data.projectStart)}`,
+      MARGIN,
+      doc.y,
+      { width: CONTENT_WIDTH / 2 - 10 }
+    );
+  doc
+    .font('Helvetica')
+    .fontSize(11)
+    .fillColor(COLORS.text)
+    .text(
+      `Export date: ${formatDate(data.exportDate)}`,
+      MARGIN + CONTENT_WIDTH / 2,
+      doc.y - 14,
+      { width: CONTENT_WIDTH / 2 - 10 }
+    );
+  doc.y += 18;
+
+  // ── Drawing-by-drawing record ───────────────────────────────────────────
+  // Group by discipline, sort disciplines alphabetically, then drawings
+  // within each discipline by drawing number (or name).
+  const byDiscipline = new Map<string, AsBuiltDrawingEntry[]>();
+  for (const d of data.drawings) {
+    const list = byDiscipline.get(d.discipline) || [];
+    list.push(d);
+    byDiscipline.set(d.discipline, list);
+  }
+  const disciplines = Array.from(byDiscipline.keys()).sort();
+  for (const disc of disciplines) {
+    const drawings = (byDiscipline.get(disc) || []).sort((a, b) => {
+      const aKey = a.drawingNo || a.name;
+      const bKey = b.drawingNo || b.name;
+      return aKey.localeCompare(bKey);
+    });
+
+    ensureSpace(doc, 60);
+    doc.y = sectionHeading(doc, disc.charAt(0).toUpperCase() + disc.slice(1), doc.y);
+
+    for (const d of drawings) {
+      ensureSpace(doc, 70);
+      // Drawing header line
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(12)
+        .fillColor(COLORS.navy)
+        .text(
+          `${d.drawingNo ? d.drawingNo + ' — ' : ''}${d.name}`,
+          MARGIN,
+          doc.y,
+          { width: CONTENT_WIDTH }
+        );
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .fillColor(COLORS.muted)
+        .text(
+          d.currentRevisionNo
+            ? `Current revision: ${d.currentRevisionNo} • IFC: ${formatDate(d.ifcReleasedAt)}`
+            : 'No IFC release recorded',
+          MARGIN,
+          doc.y + 2,
+          { width: CONTENT_WIDTH }
+        );
+      doc.y += 20;
+
+      if (d.redlines.length === 0) {
+        doc
+          .font('Helvetica-Oblique')
+          .fontSize(9)
+          .fillColor('#22A06B')
+          .text('No field redlines submitted.', MARGIN, doc.y);
+        doc.y += 14;
+        continue;
+      }
+
+      for (const r of d.redlines) {
+        ensureSpace(doc, 50);
+        // Redline line — type + submitted by + date
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(9)
+          .fillColor(COLORS.text)
+          .text(
+            `${r.redlineType.replace(/_/g, ' ')} — ${formatDate(r.submittedAt)} (${r.submittedBy})`,
+            MARGIN + 12,
+            doc.y,
+            { width: CONTENT_WIDTH - 12 }
+          );
+        doc
+          .font('Helvetica')
+          .fontSize(9)
+          .fillColor(COLORS.text)
+          .text(r.description, MARGIN + 12, doc.y + 2, { width: CONTENT_WIDTH - 12 });
+        // Status + reviewer notes
+        const statusLine = `Status: ${r.status}${r.reviewNotes ? ' • ' + r.reviewNotes : ''}`;
+        doc
+          .font('Helvetica-Oblique')
+          .fontSize(8)
+          .fillColor(COLORS.muted)
+          .text(statusLine, MARGIN + 12, doc.y + 2, { width: CONTENT_WIDTH - 12 });
+        // Amber warning if submitted after lock
+        if (r.submittedAfterLock) {
+          doc
+            .font('Helvetica-Bold')
+            .fontSize(8)
+            .fillColor('#D68A00')
+            .text(
+              '⚠ Field redline submitted after inspection was locked',
+              MARGIN + 12,
+              doc.y + 2,
+              { width: CONTENT_WIDTH - 12 }
+            );
+        }
+        doc.y += 8;
+      }
+      doc.y += 6;
+    }
+  }
+
+  // ── Final page: Certification ────────────────────────────────────────────
+  doc.addPage();
+  doc.y = sectionHeading(doc, 'Certification', 80);
+  doc
+    .font('Helvetica')
+    .fontSize(11)
+    .fillColor(COLORS.text)
+    .text(
+      'This as-built record was compiled from locked inspection records in SiteDeck Benchmark and field redlines logged in SiteDeck PM.',
+      MARGIN,
+      doc.y,
+      { width: CONTENT_WIDTH, lineGap: 2 }
+    );
+  doc.y += 28;
+
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(10)
+    .fillColor(COLORS.navy)
+    .text('Project Manager', MARGIN, doc.y);
+  doc
+    .moveTo(MARGIN, doc.y + 28)
+    .lineTo(MARGIN + 250, doc.y + 28)
+    .lineWidth(0.5)
+    .strokeColor(COLORS.border)
+    .stroke();
+  doc
+    .font('Helvetica')
+    .fontSize(9)
+    .fillColor(COLORS.muted)
+    .text('Signature', MARGIN, doc.y + 30);
+  doc
+    .moveTo(MARGIN + 300, doc.y + 28)
+    .lineTo(MARGIN + 470, doc.y + 28)
+    .lineWidth(0.5)
+    .strokeColor(COLORS.border)
+    .stroke();
+  doc
+    .font('Helvetica')
+    .fontSize(9)
+    .fillColor(COLORS.muted)
+    .text('Date', MARGIN + 300, doc.y + 30);
+
+  drawFooter(doc, 'As-Built Drawing Record');
+  return collectBuffer(doc);
+}
