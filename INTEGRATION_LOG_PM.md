@@ -1,5 +1,5 @@
 # SiteDeck PM — Integration Log
-Last updated: Sprint 15 (2026-06-16)
+Last updated: Sprint 16 (2026-06-16)
 Maintainer: Update this file at the END of every sprint that touches any integration point.
 
 ---
@@ -17,8 +17,9 @@ Must be in `/opt/sitedeck-pm/.env`:
 PRO_SERVICE_TOKEN=9936BD06-C760-472C-AC36-FCA33F7806FA
 FIREBASE_FUNCTIONS_URL=https://us-central1-site-deck.cloudfunctions.net
 PM_SERVICE_TOKEN=9936BD06-C760-472C-AC36-FCA33F7806FA
+BENCHMARK_REWORK_WEBHOOK_URL=https://benchmark.sitedeck.pro/api/v1/webhooks/pm
 ```
-Status: ⚠️ NOT YET ADDED — blocked in Pro Integration Sprint 1 (VPS SSH unavailable from Pro session)
+Status: ✅ ADDED (Sprint 14) — verified in running process environment after `systemctl restart sitedeck-pm`
 
 ---
 
@@ -55,13 +56,13 @@ Events that should be handled:
 | `pro.daily_report_submitted` | Update activity % complete, flag schedule risk if delays | ❌ NOT BUILT |
 | `pro.safety_incident` | Safety tile red, compound risk detection, notify PM | ❌ NOT BUILT |
 
+**Note for when this is built (Pro Sprint 2 enhancement):** `pro.safety_incident` now includes `affectedDfowIds`, `incidentType`, and `locationDescription`. Use `affectedDfowIds` for exact DFOW matching; fall back to `location`/`locationDescription` if empty.
+
 File to create: `src/services/proIntegration.service.ts`
 Route to create: `src/routes/pro-webhook.routes.ts` → `POST /api/v1/webhooks/pro`
 Register in: `src/routes/index.ts`
 
 ---
-
-## Endpoints PM Calls (outbound)
 
 ### → SiteDeck Benchmark
 URL: `https://benchmark.sitedeck.pro/api/v1/webhooks/pm`
@@ -142,6 +143,17 @@ FCM token storage: `FcmToken` model in PM Postgres
 
 ---
 
+## Auth Event Architecture (Sprint 16)
+
+**Decision:** Firebase is the shared auth bus across all three products.
+**Mechanism:** When a user is approved in any tool, that tool fires `auth.user.approved` (delivered via Pro's `pro.user.approved` webhook to Benchmark). Each tool upserts its own local user state. Handlers are idempotent — upsert, never insert-only.
+**Role mapping (Pro → Benchmark):**
+- Pro `admin` → Benchmark `qc_manager`
+- Pro `inspector` → Benchmark `qc_inspector`
+**Firebase UID is the canonical identifier** across all three products.
+
+---
+
 ## Account Deletion (App Store Guideline 5.1.1)
 Benchmark handles this via `DELETE /api/v1/account`.
 Status: ✅ LIVE in Benchmark (Sprint 15)
@@ -160,7 +172,7 @@ Traefik config: `scripts/traefik-ops.yml` — must be copied to `/var/www/ground
 ## Known Users
 | Name | Email | Firebase UID | PM Role | Status |
 |---|---|---|---|---|
-| Jose Vasquez | vasquezj@orionfsl.com | YUcAjSkVx6aCvzxBpG9NzIciVFG2 | project_manager | Created in Pro, NOT yet added to PM project/org |
+| Jose Vasquez | vasquezj@orionfsl.com | YUcAjSkVx6aCvzxBpG9NzIciVFG2 | project_manager | ✅ Provisioned in Benchmark (Sprint 16) |
 
 ---
 
@@ -175,7 +187,6 @@ Traefik config: `scripts/traefik-ops.yml` — must be copied to `/var/www/ground
 | 5 | `ops.sitedeck.pro` DNS A record not in Cloudflare | Ops console unreachable | PM infra | PM Sprint 14 |
 | 6 | Jose not added to a PM project/org | Jose can't use PM | PM | PM Sprint 14 |
 | 7 | Notification preferences `shouldDeliver` not wired into email/push call sites | Preferences silently ignored | PM | PM Sprint 14 |
-| 8 | Daily-digest worker not built (`digestEnabled` persisted but no cron) | Digest email | PM | PM Sprint 14 |
 
 **Resolved in Sprint 13:**
 - ✅ PM `/webhooks/benchmark` receiver built and deployed
@@ -188,12 +199,15 @@ Traefik config: `scripts/traefik-ops.yml` — must be copied to `/var/www/ground
 - ✅ Send-to-Benchmark button (Gantt + Table views)
 - ✅ Benchmark Activity Feed on Dashboard
 
+**Resolved in Pro Sprint 2 (2026-06-16):**
+- ✅ Pro `pro.safety_incident` payload enhanced with `affectedDfowIds`, `incidentType`, `locationDescription`
+- ✅ Benchmark handler updated to flag inspections by `affectedDfowIds` and prefer `locationDescription`
+- ✅ Note added for future PM `/webhooks/pro` receiver: expect new fields in `pro.safety_incident`
+
 **Resolved in Sprint 15 (prior):**
 - ✅ `pm.activity.ready_for_inspection` → Benchmark confirmed end-to-end
 - ✅ `project.activity.linked` → Benchmark confirmed end-to-end
 - ✅ PRO_SERVICE_TOKEN now verified on Benchmark's `/webhooks/pro`
-
----
 
 ## Do Not Break (regression-protected integrations)
 - PM → Benchmark webhook HMAC (`PM_BENCHMARK_WEBHOOK_SECRET` and `WEBHOOK_SECRET` must always match)
