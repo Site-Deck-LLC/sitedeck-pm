@@ -14,6 +14,13 @@ import {
   submitSubmittal,
   reviewSubmittal,
   getSubmittalPdfData,
+  createMeeting,
+  getMeetingsByProject,
+  getMeetingById,
+  updateMeeting,
+  updateMeetingActionItemStatus,
+  deleteMeeting,
+  getMeetingPdfData,
 } from './communications.service';
 
 const mockRfiCreate = jest.fn();
@@ -28,6 +35,12 @@ const mockSubmittalFindUnique = jest.fn();
 const mockSubmittalFindMany = jest.fn();
 const mockSubmittalCount = jest.fn();
 const mockSubmittalUpdate = jest.fn();
+
+const mockMeetingCreate = jest.fn();
+const mockMeetingFindUnique = jest.fn();
+const mockMeetingFindMany = jest.fn();
+const mockMeetingUpdate = jest.fn();
+const mockMeetingDelete = jest.fn();
 
 const mockPrisma = {
   rfi: {
@@ -44,6 +57,13 @@ const mockPrisma = {
     findMany: mockSubmittalFindMany,
     count: mockSubmittalCount,
     update: mockSubmittalUpdate,
+  },
+  meeting: {
+    create: mockMeetingCreate,
+    findUnique: mockMeetingFindUnique,
+    findMany: mockMeetingFindMany,
+    update: mockMeetingUpdate,
+    delete: mockMeetingDelete,
   },
 } as unknown as PrismaClient;
 
@@ -205,15 +225,16 @@ describe('communications.service', () => {
 
     it('submits an RFI', async () => {
       const updated = { id: 'rfi-1', status: 'submitted', submittedAt: new Date() };
+      mockRfiFindUnique.mockResolvedValue({ id: 'rfi-1', status: 'draft' });
       mockRfiUpdate.mockResolvedValue(updated);
 
       const result = await submitRfi('rfi-1');
       expect(mockRfiUpdate).toHaveBeenCalledWith({
         where: { id: 'rfi-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'submitted',
           submittedAt: expect.any(Date),
-        },
+        }),
       });
       expect(result.status).toBe('submitted');
     });
@@ -226,33 +247,61 @@ describe('communications.service', () => {
         answeredAt: new Date(),
         assignedTo: 'pm-1',
       };
+      mockRfiFindUnique.mockResolvedValue({ id: 'rfi-1', status: 'submitted' });
       mockRfiUpdate.mockResolvedValue(updated);
 
       const result = await answerRfi('rfi-1', 'Use grade 60 rebar', 'pm-1');
       expect(mockRfiUpdate).toHaveBeenCalledWith({
         where: { id: 'rfi-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'answered',
           responseText: 'Use grade 60 rebar',
           answeredAt: expect.any(Date),
           assignedTo: 'pm-1',
-        },
+        }),
       });
       expect(result.status).toBe('answered');
     });
 
     it('closes an RFI', async () => {
       const updated = { id: 'rfi-1', status: 'closed' };
+      mockRfiFindUnique.mockResolvedValue({ id: 'rfi-1', status: 'answered' });
       mockRfiUpdate.mockResolvedValue(updated);
 
       const result = await closeRfi('rfi-1');
       expect(mockRfiUpdate).toHaveBeenCalledWith({
         where: { id: 'rfi-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'closed',
-        },
+        }),
       });
       expect(result.status).toBe('closed');
+    });
+
+    it('updateRfi updates fields without status change', async () => {
+      const existing = { id: 'rfi-1', status: 'submitted', statusHistory: [] };
+      mockRfiFindUnique.mockResolvedValue(existing);
+      mockRfiUpdate.mockResolvedValue({ id: 'rfi-1', ballInCourt: 'EOR' });
+
+      await import('./communications.service').then((m) => m.updateRfi('rfi-1', { ballInCourt: 'EOR' }));
+      expect(mockRfiUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'rfi-1' },
+          data: expect.objectContaining({ ballInCourt: 'EOR' }),
+        })
+      );
+    });
+
+    it('updateRfi appends history when status changes', async () => {
+      const existing = { id: 'rfi-1', status: 'draft', statusHistory: [] };
+      mockRfiFindUnique.mockResolvedValue(existing);
+      mockRfiUpdate.mockResolvedValue({ id: 'rfi-1', status: 'submitted' });
+
+      await import('./communications.service').then((m) => m.updateRfi('rfi-1', { status: 'submitted' }));
+      const call = mockRfiUpdate.mock.calls[0][0];
+      const history = call.data.statusHistory as any[];
+      expect(history).toHaveLength(1);
+      expect(history[0].status).toBe('submitted');
     });
 
     it('returns PDF data for an RFI', async () => {
@@ -386,22 +435,24 @@ describe('communications.service', () => {
     });
 
     it('submits a submittal', async () => {
+      const existing = { id: 'sub-1', statusHistory: [] };
+      mockSubmittalFindUnique.mockResolvedValue(existing);
       const updated = { id: 'sub-1', status: 'submitted', submittedAt: new Date() };
       mockSubmittalUpdate.mockResolvedValue(updated);
 
       const result = await submitSubmittal('sub-1');
       expect(mockSubmittalUpdate).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'submitted',
           submittedAt: expect.any(Date),
-        },
+        }),
       });
       expect(result.status).toBe('submitted');
     });
 
     it('reviews a submittal as approved', async () => {
-      const existing = { id: 'sub-1', description: 'Original desc' };
+      const existing = { id: 'sub-1', description: 'Original desc', statusHistory: [] };
       mockSubmittalFindUnique.mockResolvedValue(existing);
       const updated = { id: 'sub-1', status: 'approved', reviewedBy: 'pm-1', reviewedAt: new Date() };
       mockSubmittalUpdate.mockResolvedValue(updated);
@@ -409,62 +460,61 @@ describe('communications.service', () => {
       const result = await reviewSubmittal('sub-1', 'approved', 'pm-1');
       expect(mockSubmittalUpdate).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'approved',
           reviewedBy: 'pm-1',
           reviewedAt: expect.any(Date),
-          description: 'Original desc',
-        },
+        }),
       });
       expect(result.status).toBe('approved');
     });
 
     it('reviews a submittal as rejected with notes', async () => {
-      const existing = { id: 'sub-1', description: 'Original desc' };
+      const existing = { id: 'sub-1', description: 'Original desc', statusHistory: [] };
       mockSubmittalFindUnique.mockResolvedValue(existing);
       const updated = {
         id: 'sub-1',
         status: 'rejected',
         reviewedBy: 'pm-1',
         reviewedAt: new Date(),
-        description: 'Original desc\n\nReview notes: Missing test data',
+        reviewComments: 'Missing test data',
       };
       mockSubmittalUpdate.mockResolvedValue(updated);
 
       const result = await reviewSubmittal('sub-1', 'rejected', 'pm-1', 'Missing test data');
       expect(mockSubmittalUpdate).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'rejected',
           reviewedBy: 'pm-1',
           reviewedAt: expect.any(Date),
-          description: 'Original desc\n\nReview notes: Missing test data',
-        },
+          reviewComments: 'Missing test data',
+        }),
       });
       expect(result.status).toBe('rejected');
     });
 
     it('reviews a submittal as revision_required', async () => {
-      const existing = { id: 'sub-1', description: null };
+      const existing = { id: 'sub-1', description: null, statusHistory: [] };
       mockSubmittalFindUnique.mockResolvedValue(existing);
       const updated = {
         id: 'sub-1',
         status: 'revision_required',
         reviewedBy: 'pm-1',
         reviewedAt: new Date(),
-        description: '\n\nReview notes: Revise and resubmit',
+        reviewComments: 'Revise and resubmit',
       };
       mockSubmittalUpdate.mockResolvedValue(updated);
 
       const result = await reviewSubmittal('sub-1', 'revision_required', 'pm-1', 'Revise and resubmit');
       expect(mockSubmittalUpdate).toHaveBeenCalledWith({
         where: { id: 'sub-1' },
-        data: {
+        data: expect.objectContaining({
           status: 'revision_required',
           reviewedBy: 'pm-1',
           reviewedAt: expect.any(Date),
-          description: '\n\nReview notes: Revise and resubmit',
-        },
+          reviewComments: 'Revise and resubmit',
+        }),
       });
       expect(result.status).toBe('revision_required');
     });
@@ -512,6 +562,140 @@ describe('communications.service', () => {
     it('throws when PDF data requested for non-existent submittal', async () => {
       mockSubmittalFindUnique.mockResolvedValue(null);
       await expect(getSubmittalPdfData('sub-1')).rejects.toThrow('Submittal not found');
+    });
+  });
+
+  describe('Meeting minutes', () => {
+    it('creates a meeting with all fields', async () => {
+      mockMeetingCreate.mockResolvedValue({ id: 'meet-1' });
+      const result = await createMeeting({
+        projectId: 'proj-1',
+        title: 'Weekly OAC',
+        meetingDate: new Date('2026-06-01'),
+        location: 'Site trailer',
+        facilitator: 'Bob',
+        attendees: [
+          { name: 'Alice', role: 'Owner' },
+          { name: 'Bob', role: 'PM' },
+        ],
+        agenda: ['Safety', 'Schedule', 'Change Orders'],
+        minutes: '## Safety\nNo incidents.',
+        actionItems: [
+          { description: 'Submit RFI-12', assignee: 'Alice', status: 'open' },
+        ],
+        createdBy: 'user-1',
+        status: 'draft',
+      });
+
+      expect(result).toEqual({ id: 'meet-1' });
+      expect(mockMeetingCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          projectId: 'proj-1',
+          title: 'Weekly OAC',
+          status: 'draft',
+        }),
+      });
+    });
+
+    it('returns meetings for a project ordered by date desc', async () => {
+      mockMeetingFindMany.mockResolvedValue([{ id: 'meet-2' }, { id: 'meet-1' }]);
+      const result = await getMeetingsByProject('proj-1');
+      expect(result).toHaveLength(2);
+      expect(mockMeetingFindMany).toHaveBeenCalledWith({
+        where: { projectId: 'proj-1' },
+        orderBy: { meetingDate: 'desc' },
+      });
+    });
+
+    it('filters meetings by date range when provided', async () => {
+      mockMeetingFindMany.mockResolvedValue([]);
+      const start = new Date('2026-06-01');
+      const end = new Date('2026-06-30');
+      await getMeetingsByProject('proj-1', start, end);
+      expect(mockMeetingFindMany).toHaveBeenCalledWith({
+        where: {
+          projectId: 'proj-1',
+          meetingDate: { gte: start, lte: end },
+        },
+        orderBy: { meetingDate: 'desc' },
+      });
+    });
+
+    it('returns a single meeting by id', async () => {
+      mockMeetingFindUnique.mockResolvedValue({ id: 'meet-1', title: 'Weekly OAC' });
+      const result = await getMeetingById('meet-1');
+      expect(result?.title).toBe('Weekly OAC');
+    });
+
+    it('updates meeting fields', async () => {
+      mockMeetingUpdate.mockResolvedValue({ id: 'meet-1', status: 'published' });
+      const result = await updateMeeting('meet-1', { status: 'published' });
+      expect(result.status).toBe('published');
+    });
+
+    it('updates a single action item status by index', async () => {
+      mockMeetingFindUnique.mockResolvedValue({
+        id: 'meet-1',
+        actionItems: [
+          { description: 'Task A', status: 'open' },
+          { description: 'Task B', status: 'open' },
+        ],
+      });
+      mockMeetingUpdate.mockResolvedValue({ id: 'meet-1' });
+      await updateMeetingActionItemStatus('meet-1', 1, 'closed');
+      expect(mockMeetingUpdate).toHaveBeenCalledWith({
+        where: { id: 'meet-1' },
+        data: {
+          actionItems: [
+            { description: 'Task A', status: 'open' },
+            { description: 'Task B', status: 'closed' },
+          ],
+        },
+      });
+    });
+
+    it('throws when action item index is out of range', async () => {
+      mockMeetingFindUnique.mockResolvedValue({ id: 'meet-1', actionItems: [{ description: 'A' }] });
+      await expect(updateMeetingActionItemStatus('meet-1', 5, 'closed')).rejects.toThrow(
+        'Action item index out of range'
+      );
+    });
+
+    it('throws when updating action item on non-existent meeting', async () => {
+      mockMeetingFindUnique.mockResolvedValue(null);
+      await expect(updateMeetingActionItemStatus('meet-x', 0, 'closed')).rejects.toThrow(
+        'Meeting not found'
+      );
+    });
+
+    it('deletes a meeting', async () => {
+      mockMeetingDelete.mockResolvedValue({ id: 'meet-1' });
+      await deleteMeeting('meet-1');
+      expect(mockMeetingDelete).toHaveBeenCalledWith({ where: { id: 'meet-1' } });
+    });
+
+    it('returns meeting PDF data with project name', async () => {
+      mockMeetingFindUnique.mockResolvedValue({
+        id: 'meet-1',
+        title: 'OAC',
+        meetingDate: new Date('2026-06-01'),
+        location: 'Site trailer',
+        facilitator: 'Bob',
+        attendees: [{ name: 'Alice' }],
+        agenda: ['Safety'],
+        minutes: 'Minutes text',
+        actionItems: [{ description: 'A', status: 'open' }],
+        status: 'published',
+        project: { name: 'BESS Texas' },
+      });
+      const result = await getMeetingPdfData('meet-1');
+      expect(result.projectName).toBe('BESS Texas');
+      expect(result.title).toBe('OAC');
+    });
+
+    it('throws when PDF data requested for non-existent meeting', async () => {
+      mockMeetingFindUnique.mockResolvedValue(null);
+      await expect(getMeetingPdfData('meet-x')).rejects.toThrow('Meeting not found');
     });
   });
 });

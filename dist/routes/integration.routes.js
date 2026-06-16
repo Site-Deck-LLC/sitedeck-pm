@@ -50,6 +50,30 @@ router.post('/issues', express_auth_1.requireAuth, (0, express_auth_1.requireRol
     });
     res.status(201).json(result);
 }));
+router.get('/issues/:issueId', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const result = await integrationService.getIssueById(req.params.issueId);
+    if (!result) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Issue not found' } });
+        return;
+    }
+    res.json(result);
+}));
+router.patch('/issues/:issueId', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const { notesAppend, ...rest } = req.body || {};
+    let result;
+    if (notesAppend && typeof notesAppend === 'string') {
+        // Append a note with author, then apply the rest of the update.
+        result = await integrationService.appendIssueNote({
+            issueId: req.params.issueId,
+            text: notesAppend,
+            author: req.user?.uid || 'unknown',
+        });
+    }
+    if (Object.keys(rest).length) {
+        result = await integrationService.updateIssue(req.params.issueId, rest);
+    }
+    res.json(result);
+}));
 router.get('/change-log', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const result = await integrationService.getChangeLogByProject(req.params.projectId);
     res.json(result);

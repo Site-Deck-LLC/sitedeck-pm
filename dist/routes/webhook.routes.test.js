@@ -13,6 +13,7 @@ const mockScheduleActivityUpdate = jest.fn();
 const mockScheduleActivityFindMany = jest.fn();
 const mockProjectFindUnique = jest.fn();
 const mockScheduleChangeRequestCreate = jest.fn();
+const mockActivityRelationshipFindMany = jest.fn();
 const mockPrisma = {
     webhooksLog: {
         create: mockWebhooksLogCreate,
@@ -28,6 +29,9 @@ const mockPrisma = {
     },
     scheduleChangeRequest: {
         create: mockScheduleChangeRequestCreate,
+    },
+    activityRelationship: {
+        findMany: mockActivityRelationshipFindMany,
     },
 };
 beforeEach(() => {
@@ -52,6 +56,7 @@ describe('webhook.routes', () => {
                 { id: 'act-1', startDate: new Date('2026-01-01'), endDate: new Date('2026-01-05'), duration: 4, predecessors: null, successors: null },
             ],
         });
+        mockActivityRelationshipFindMany.mockResolvedValue([]);
         mockWebhooksLogCreate.mockResolvedValue({ id: 'log-1' });
         const res = await (0, supertest_1.default)(app).post('/api/v1/webhooks/task-completed').send({
             project_id: 'proj-1',

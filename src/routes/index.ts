@@ -39,6 +39,8 @@ import supportRouter from './support.routes';
 import bugApprovalRouter from './bug-approval.routes';
 import { quickbooksRouter, quickbooksProjectRouter } from './quickbooks.routes';
 import subSchedulesRouter from './sub-schedules.routes';
+import benchmarkWebhookRouter from './benchmark-webhook.routes';
+import reworkTaskRouter from './rework-task.routes';
 
 const router = Router();
 
@@ -64,6 +66,7 @@ router.use('/projects/:projectId/templates', projectTemplatesRouter);
 router.use('/projects/:projectId/documents', documentsRouter);
 router.use('/billing', billingRouter);
 router.use('/webhooks/stripe', stripeWebhookRouter);
+router.use('/webhooks/benchmark', benchmarkWebhookRouter);
 router.use('/webhooks', webhookRouter);
 router.use('/templates', templatesRouter);
 router.use('/portfolio', portfolioRouter);
@@ -74,6 +77,7 @@ router.use('/projects/:projectId/redlines', redlinesRouter);
 router.use('/projects/:projectId/team', teamRouter);
 router.use('/projects/:projectId/risk-intelligence', riskIntelligenceRouter);
 router.use('/projects/:projectId/subcontract-milestones', subcontractMilestonesRouter);
+router.use('/projects/:projectId/rework-tasks', reworkTaskRouter);
 router.use('/admin', adminRouter);
 router.use('/support', supportRouter);
 router.use('/bug-approval', bugApprovalRouter);

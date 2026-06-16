@@ -8,8 +8,12 @@ const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
 const routes_1 = __importDefault(require("./routes"));
 const error_handler_1 = require("./lib/error-handler");
+const cors_1 = require("./middleware/cors");
 function createApp() {
     const app = (0, express_1.default)();
+    // CORS must run before express.json so OPTIONS preflight works for
+    // large bodies and before any other route logic.
+    app.use(cors_1.corsForSiteDeck);
     app.use(express_1.default.json());
     // Serve React frontend build if it exists
     const frontendDist = path_1.default.join(__dirname, '../frontend/dist');

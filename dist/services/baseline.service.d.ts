@@ -2,43 +2,43 @@ import { Prisma } from '@prisma/client';
 import { Role } from '../constants/roles';
 export declare function createBaseline(projectId: string, name: string, createdBy: string): Promise<{
     id: string;
-    name: string;
     createdAt: Date;
+    name: string;
     projectId: string;
+    createdBy: string;
     locked: boolean;
     baselineDate: Date;
     activities: Prisma.JsonValue;
-    createdBy: string;
 }>;
 export declare function lockBaseline(baselineId: string): Promise<{
     id: string;
-    name: string;
     createdAt: Date;
+    name: string;
     projectId: string;
+    createdBy: string;
     locked: boolean;
     baselineDate: Date;
     activities: Prisma.JsonValue;
-    createdBy: string;
 }>;
 export declare function getBaselineById(id: string): Promise<{
     id: string;
-    name: string;
     createdAt: Date;
+    name: string;
     projectId: string;
+    createdBy: string;
     locked: boolean;
     baselineDate: Date;
     activities: Prisma.JsonValue;
-    createdBy: string;
 } | null>;
 export declare function getBaselinesByProject(projectId: string): Promise<{
     id: string;
-    name: string;
     createdAt: Date;
+    name: string;
     projectId: string;
+    createdBy: string;
     locked: boolean;
     baselineDate: Date;
     activities: Prisma.JsonValue;
-    createdBy: string;
 }[]>;
 export declare function compareToBaseline(projectId: string, baselineId: string): Promise<{
     activityId: string;

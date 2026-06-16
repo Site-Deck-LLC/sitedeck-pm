@@ -2,12 +2,18 @@ import * as email from './email.service';
 
 const originalHost = process.env.MAIL_HOST;
 const originalFrom = process.env.MAIL_FROM;
+const originalFromSitedeck = process.env.MAIL_FROM_SITEDECK;
+const originalSitedeckUser = process.env.MAIL_SITEDECK_USER;
+const originalSitedeckPass = process.env.MAIL_SITEDECK_PASS;
 
 beforeEach(() => {
   delete process.env.MAIL_HOST;
   delete process.env.MAIL_PORT;
   delete process.env.MAIL_USER;
   delete process.env.MAIL_PASS;
+  delete process.env.MAIL_FROM_SITEDECK;
+  delete process.env.MAIL_SITEDECK_USER;
+  delete process.env.MAIL_SITEDECK_PASS;
   process.env.MAIL_FROM = 'SiteDeck Helper <helper@modestintent.com>';
   // Reset the cached transport so each test sees the env state
   // set in this beforeEach.
@@ -18,6 +24,26 @@ afterAll(() => {
   if (originalHost) process.env.MAIL_HOST = originalHost;
   if (originalFrom) process.env.MAIL_FROM = originalFrom;
   else delete process.env.MAIL_FROM;
+  if (originalFromSitedeck) process.env.MAIL_FROM_SITEDECK = originalFromSitedeck;
+  else delete process.env.MAIL_FROM_SITEDECK;
+  if (originalSitedeckUser) process.env.MAIL_SITEDECK_USER = originalSitedeckUser;
+  else delete process.env.MAIL_SITEDECK_USER;
+  if (originalSitedeckPass) process.env.MAIL_SITEDECK_PASS = originalSitedeckPass;
+  else delete process.env.MAIL_SITEDECK_PASS;
+});
+
+describe('sendEmailSitedeck', () => {
+  it('falls back gracefully when MAIL_HOST is not set', async () => {
+    const r = await email.sendEmailSitedeck({ to: 'pm@example.com', subject: 's', text: 't' });
+    expect(r.fallback).toBe(true);
+    expect(r.ok).toBe(true);
+    expect(r.sent).toBe(1);
+  });
+
+  it('returns no-recipients branch for empty array', async () => {
+    const r = await email.sendEmailSitedeck({ to: [], subject: 's', text: 't' });
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe('sendEmail', () => {

@@ -56,14 +56,14 @@ export declare function createPurchaseOrder(data: CreatePurchaseOrderInput): Pro
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
     wbsItemId: string | null;
-    createdBy: string;
-    activityId: string | null;
+    updatedAt: Date;
     poNumber: string;
     vendorName: string;
     totalAmount: Prisma.Decimal;
+    activityId: string | null;
+    createdBy: string;
 }>;
 export declare function getPurchaseOrderById(id: string): Promise<({
     lineItems: {
@@ -81,14 +81,14 @@ export declare function getPurchaseOrderById(id: string): Promise<({
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
     wbsItemId: string | null;
-    createdBy: string;
-    activityId: string | null;
+    updatedAt: Date;
     poNumber: string;
     vendorName: string;
     totalAmount: Prisma.Decimal;
+    activityId: string | null;
+    createdBy: string;
 }) | null>;
 export declare function getPurchaseOrdersByProject(projectId: string): Promise<({
     lineItems: {
@@ -106,14 +106,14 @@ export declare function getPurchaseOrdersByProject(projectId: string): Promise<(
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
     wbsItemId: string | null;
-    createdBy: string;
-    activityId: string | null;
+    updatedAt: Date;
     poNumber: string;
     vendorName: string;
     totalAmount: Prisma.Decimal;
+    activityId: string | null;
+    createdBy: string;
 })[]>;
 export declare function issuePurchaseOrder(id: string): Promise<{
     lineItems: {
@@ -131,14 +131,14 @@ export declare function issuePurchaseOrder(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
     wbsItemId: string | null;
-    createdBy: string;
-    activityId: string | null;
+    updatedAt: Date;
     poNumber: string;
     vendorName: string;
     totalAmount: Prisma.Decimal;
+    activityId: string | null;
+    createdBy: string;
 }>;
 export declare function closePurchaseOrder(id: string): Promise<{
     lineItems: {
@@ -156,14 +156,14 @@ export declare function closePurchaseOrder(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
     wbsItemId: string | null;
-    createdBy: string;
-    activityId: string | null;
+    updatedAt: Date;
     poNumber: string;
     vendorName: string;
     totalAmount: Prisma.Decimal;
+    activityId: string | null;
+    createdBy: string;
 }>;
 export declare function addLineItemToPO(poId: string, item: CreateLineItemInput): Promise<{
     lineItems: {
@@ -181,14 +181,14 @@ export declare function addLineItemToPO(poId: string, item: CreateLineItemInput)
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
     wbsItemId: string | null;
-    createdBy: string;
-    activityId: string | null;
+    updatedAt: Date;
     poNumber: string;
     vendorName: string;
     totalAmount: Prisma.Decimal;
+    activityId: string | null;
+    createdBy: string;
 }>;
 export declare function recordMaterialDelivery(data: RecordDeliveryInput): Promise<{
     id: string;
@@ -230,8 +230,8 @@ export declare function createInvoice(data: CreateInvoiceInput): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     poId: string;
     invoiceNumber: string;
     invoiceAmount: Prisma.Decimal;
@@ -242,8 +242,8 @@ export declare function performThreeWayMatch(invoiceId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     poId: string;
     invoiceNumber: string;
     invoiceAmount: Prisma.Decimal;
@@ -254,8 +254,8 @@ export declare function approveInvoice(invoiceId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     poId: string;
     invoiceNumber: string;
     invoiceAmount: Prisma.Decimal;
@@ -266,8 +266,8 @@ export declare function getInvoicesByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     poId: string;
     invoiceNumber: string;
     invoiceAmount: Prisma.Decimal;
@@ -278,8 +278,8 @@ export declare function getInvoicesByPO(poId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     poId: string;
     invoiceNumber: string;
     invoiceAmount: Prisma.Decimal;
@@ -295,8 +295,8 @@ export declare function createSubcontract(data: CreateSubcontractInput): Promise
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     subcontractorName: string;
     contractAmount: Prisma.Decimal;
     scheduleOfValues: Prisma.JsonValue | null;
@@ -306,8 +306,8 @@ export declare function getSubcontractById(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     subcontractorName: string;
     contractAmount: Prisma.Decimal;
     scheduleOfValues: Prisma.JsonValue | null;
@@ -317,8 +317,8 @@ export declare function getSubcontractsByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     subcontractorName: string;
     contractAmount: Prisma.Decimal;
     scheduleOfValues: Prisma.JsonValue | null;
@@ -328,8 +328,8 @@ export declare function updateSubcontractStatus(id: string, status: string): Pro
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     subcontractorName: string;
     contractAmount: Prisma.Decimal;
     scheduleOfValues: Prisma.JsonValue | null;
@@ -339,8 +339,8 @@ export declare function recordProgressBilling(subcontractId: string, amount: num
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     subcontractorName: string;
     contractAmount: Prisma.Decimal;
     scheduleOfValues: Prisma.JsonValue | null;

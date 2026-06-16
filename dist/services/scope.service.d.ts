@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { RecalculateBaselineResult } from './cost.service';
 export interface CreateChangeOrderInput {
     projectId: string;
     date: Date;
@@ -57,11 +58,11 @@ export declare function createChangeOrder(data: CreateChangeOrderInput): Promise
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
-    coNumber: string;
     date: Date;
+    coNumber: string;
     dollarValue: Prisma.Decimal | null;
     scheduleImpact: number | null;
     approver: string | null;
@@ -70,28 +71,34 @@ export declare function createChangeOrder(data: CreateChangeOrderInput): Promise
 }>;
 export declare function getChangeOrderById(id: string): Promise<({
     project: {
-        id: string;
-        name: string;
-        status: string;
         orgId: string;
+        id: string;
+        status: string;
+        createdAt: Date;
+        name: string;
+        updatedAt: Date;
         structureType: string;
         structureLocked: boolean;
         startDate: Date | null;
         endDate: Date | null;
         activeMilestones: Prisma.JsonValue | null;
         superintendentAssignments: Prisma.JsonValue | null;
-        createdAt: Date;
-        updatedAt: Date;
+        contractValue: Prisma.Decimal | null;
+        trirTarget: number | null;
+        latitude: number | null;
+        longitude: number | null;
+        city: string | null;
+        state: string | null;
     };
 } & {
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
-    coNumber: string;
     date: Date;
+    coNumber: string;
     dollarValue: Prisma.Decimal | null;
     scheduleImpact: number | null;
     approver: string | null;
@@ -102,11 +109,11 @@ export declare function getChangeOrdersByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
-    coNumber: string;
     date: Date;
+    coNumber: string;
     dollarValue: Prisma.Decimal | null;
     scheduleImpact: number | null;
     approver: string | null;
@@ -114,29 +121,48 @@ export declare function getChangeOrdersByProject(projectId: string): Promise<{
     affectedActivityIds: Prisma.JsonValue | null;
 }[]>;
 export declare function approveChangeOrder(id: string, approver: string): Promise<{
+    changeOrder: any;
+    baseline: RecalculateBaselineResult;
+}>;
+export declare function rejectChangeOrder(id: string, approver: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
-    coNumber: string;
     date: Date;
+    coNumber: string;
     dollarValue: Prisma.Decimal | null;
     scheduleImpact: number | null;
     approver: string | null;
     approvedAt: Date | null;
     affectedActivityIds: Prisma.JsonValue | null;
 }>;
-export declare function rejectChangeOrder(id: string, approver: string): Promise<{
+export declare function submitChangeOrder(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
-    coNumber: string;
     date: Date;
+    coNumber: string;
+    dollarValue: Prisma.Decimal | null;
+    scheduleImpact: number | null;
+    approver: string | null;
+    approvedAt: Date | null;
+    affectedActivityIds: Prisma.JsonValue | null;
+}>;
+export declare function updateChangeOrder(id: string, data: UpdateChangeOrderInput): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    description: string;
+    date: Date;
+    coNumber: string;
     dollarValue: Prisma.Decimal | null;
     scheduleImpact: number | null;
     approver: string | null;

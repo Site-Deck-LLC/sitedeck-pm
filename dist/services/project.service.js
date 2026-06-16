@@ -8,8 +8,10 @@ exports.lockProjectStructure = lockProjectStructure;
 exports.addWorkBreakdownItem = addWorkBreakdownItem;
 exports.deleteProject = deleteProject;
 exports.setProjectOrgBridge = setProjectOrgBridge;
+exports.getProjectMapData = getProjectMapData;
 const prisma_1 = require("../lib/prisma");
 const status_1 = require("../constants/status");
+const dashboard_service_1 = require("./dashboard.service");
 async function createProject(data) {
     const prisma = (0, prisma_1.getPrismaClient)();
     return prisma.project.create({
@@ -21,6 +23,10 @@ async function createProject(data) {
             endDate: data.endDate,
             activeMilestones: data.activeMilestones,
             superintendentAssignments: data.superintendentAssignments,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            city: data.city,
+            state: data.state,
         },
     });
 }
@@ -48,6 +54,10 @@ async function updateProject(id, data) {
             endDate: data.endDate,
             activeMilestones: data.activeMilestones,
             superintendentAssignments: data.superintendentAssignments,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            city: data.city,
+            state: data.state,
         },
     });
 }
@@ -108,5 +118,68 @@ async function setProjectOrgBridge(id, orgId) {
         where: { id },
         data: { orgId },
     });
+}
+function computeCpiSpiStatus(cpi, spi) {
+    if (cpi < 0.95 || spi < 0.85)
+        return 'red';
+    if (cpi < 1.0 || spi < 0.9)
+        return 'amber';
+    return 'green';
+}
+async function getProjectMapData() {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    const projects = await prisma.project.findMany({
+        where: { status: { not: status_1.PROJECT_STATUSES.CANCELLED } },
+        orderBy: { createdAt: 'desc' },
+        select: {
+            id: true,
+            name: true,
+            status: true,
+            latitude: true,
+            longitude: true,
+            city: true,
+            state: true,
+        },
+    });
+    const results = [];
+    for (const p of projects) {
+        let health = 'green';
+        let cpi = 1;
+        let spi = 1;
+        let openItems = 0;
+        try {
+            const dashboard = await (0, dashboard_service_1.getMorningDashboard)(p.id, { incidents: 0, openObservations: 0 });
+            const tileStatuses = Object.values(dashboard.tiles).map((t) => t.status);
+            if (tileStatuses.includes('red')) {
+                health = 'red';
+            }
+            else if (tileStatuses.includes('amber')) {
+                health = 'amber';
+            }
+            cpi = dashboard.performance.cpi ?? 1;
+            spi = dashboard.performance.spi ?? 1;
+            openItems =
+                (dashboard.tiles.clientIssues.count ?? 0) +
+                    (dashboard.tiles.fieldIssues.count ?? 0);
+        }
+        catch {
+            // Fallback: if dashboard computation fails, default values
+        }
+        results.push({
+            id: p.id,
+            name: p.name,
+            status: p.status,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            city: p.city,
+            state: p.state,
+            health,
+            cpi: Math.round(cpi * 100) / 100,
+            spi: Math.round(spi * 100) / 100,
+            openItems,
+            computedStatus: computeCpiSpiStatus(cpi, spi),
+        });
+    }
+    return results;
 }
 //# sourceMappingURL=project.service.js.map

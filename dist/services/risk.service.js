@@ -245,6 +245,7 @@ async function autoCreateRiskFromSafetyIncident(projectId, incidentData, inciden
             owner: 'safety_system',
             source: risk_1.RISK_SOURCES.SAFETY_INCIDENT_WEBHOOK,
             incidentReference,
+            recordable: incidentData.recordable,
         },
     });
 }

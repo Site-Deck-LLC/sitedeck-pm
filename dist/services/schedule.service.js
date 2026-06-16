@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.calculateCpm = calculateCpm;
 exports.calculateBaselineVariance = calculateBaselineVariance;
 exports.calculateCriticalPathImpact = calculateCriticalPathImpact;
+exports.getSchedulePerformance = getSchedulePerformance;
 exports.recalculateSchedule = recalculateSchedule;
 const prisma_1 = require("../lib/prisma");
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -59,18 +60,31 @@ function calculateCpm(activities, projectStart) {
     const efOffset = new Map();
     for (const id of topoOrder) {
         const act = activityMap.get(id);
-        let maxPredFinish = -Infinity;
+        let maxEs = -Infinity;
         for (const pred of act.predecessors || []) {
+            const predEs = esOffset.get(pred.activityId);
             const predEf = efOffset.get(pred.activityId);
-            // V1: FS only. TODO: implement SS, FF, SF for V2
-            if (pred.type === 'FS' || !pred.type) {
-                const predFinish = predEf + pred.lag;
-                if (predFinish > maxPredFinish) {
-                    maxPredFinish = predFinish;
-                }
+            let candidate;
+            switch (pred.type) {
+                case 'FS':
+                default:
+                    candidate = predEf + pred.lag;
+                    break;
+                case 'SS':
+                    candidate = predEs + pred.lag;
+                    break;
+                case 'FF':
+                    candidate = predEf + pred.lag - act.duration;
+                    break;
+                case 'SF':
+                    candidate = predEs + pred.lag - act.duration;
+                    break;
+            }
+            if (candidate > maxEs) {
+                maxEs = candidate;
             }
         }
-        const actEs = maxPredFinish === -Infinity ? 0 : maxPredFinish;
+        const actEs = Math.max(0, maxEs === -Infinity ? 0 : maxEs);
         const actEf = actEs + act.duration;
         esOffset.set(id, actEs);
         efOffset.set(id, actEf);
@@ -87,19 +101,34 @@ function calculateCpm(activities, projectStart) {
             lfOffset.set(id, projectEndOffset);
         }
         else {
-            let minSuccStart = Infinity;
+            let minLf = Infinity;
             for (const succId of successors) {
                 const succLs = lsOffset.get(succId);
+                const succLf = lfOffset.get(succId);
                 const succAct = activityMap.get(succId);
                 const link = succAct.predecessors?.find((p) => p.activityId === id);
                 const lag = link?.lag || 0;
-                // V1: FS only. TODO: implement SS, FF, SF for V2
-                const candidate = succLs - lag;
-                if (candidate < minSuccStart) {
-                    minSuccStart = candidate;
+                let candidate;
+                switch (link?.type) {
+                    case 'FS':
+                    default:
+                        candidate = succLs - lag;
+                        break;
+                    case 'SS':
+                        candidate = succLs - lag + act.duration;
+                        break;
+                    case 'FF':
+                        candidate = succLf - lag;
+                        break;
+                    case 'SF':
+                        candidate = succLf - lag + act.duration;
+                        break;
+                }
+                if (candidate < minLf) {
+                    minLf = candidate;
                 }
             }
-            lfOffset.set(id, minSuccStart);
+            lfOffset.set(id, minLf);
         }
         lsOffset.set(id, lfOffset.get(id) - act.duration);
     }
@@ -121,11 +150,26 @@ function calculateCpm(activities, projectStart) {
             let minFf = Infinity;
             for (const succId of successors) {
                 const succEs = esOffset.get(succId);
+                const succEf = efOffset.get(succId);
                 const succAct = activityMap.get(succId);
                 const link = succAct.predecessors?.find((p) => p.activityId === id);
                 const lag = link?.lag || 0;
-                // V1: FS only. TODO: implement SS, FF, SF for V2
-                const candidate = succEs - actEf - lag;
+                let candidate;
+                switch (link?.type) {
+                    case 'FS':
+                    default:
+                        candidate = succEs - actEf - lag;
+                        break;
+                    case 'SS':
+                        candidate = succEs - actEs - lag;
+                        break;
+                    case 'FF':
+                        candidate = succEf - actEf - lag;
+                        break;
+                    case 'SF':
+                        candidate = succEf - actEs - lag;
+                        break;
+                }
                 if (candidate < minFf) {
                     minFf = candidate;
                 }
@@ -139,7 +183,7 @@ function calculateCpm(activities, projectStart) {
             lateFinish: addDays(projectStart, actLf),
             totalFloat,
             freeFloat,
-            isCritical: totalFloat <= 0.0001,
+            isCritical: Math.abs(totalFloat) <= 0.0001,
         });
     }
     return result;
@@ -158,6 +202,90 @@ function calculateCriticalPathImpact(activities, changedActivityId, newDuration,
     const modifiedEnd = Math.max(...Array.from(modifiedResult.values()).map((r) => r.earlyFinish.getTime()));
     return (modifiedEnd - originalEnd) / MS_PER_DAY;
 }
+async function getSchedulePerformance(projectId) {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { startDate: true, endDate: true },
+    });
+    if (!project || !project.startDate) {
+        throw new Error('Project start date required');
+    }
+    const start = project.startDate;
+    const end = project.endDate || new Date(start.getUTCFullYear() + 1, start.getUTCMonth(), start.getUTCDate());
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    // Get locked baseline, or the most recent one
+    const baseline = await prisma.scheduleBaseline.findFirst({
+        where: { projectId },
+        orderBy: { locked: 'desc', baselineDate: 'desc' },
+    });
+    const baselineActivities = baseline
+        ? (baseline.activities || [])
+        : [];
+    const currentActivities = await prisma.scheduleActivity.findMany({
+        where: { projectId },
+        select: { startDate: true, endDate: true, duration: true, percentComplete: true },
+    });
+    // Calculate total baseline and current durations
+    const totalBaselineDuration = baselineActivities.reduce((s, a) => s + Math.max(1, a.duration), 0);
+    const totalCurrentDuration = currentActivities.reduce((s, a) => s + Math.max(1, a.duration), 0);
+    // Current actual % complete (weighted by duration)
+    const currentActualPct = totalCurrentDuration > 0
+        ? currentActivities.reduce((s, a) => s + a.duration * a.percentComplete, 0) / totalCurrentDuration
+        : 0;
+    // Generate daily points
+    const data = [];
+    const cursor = new Date(start);
+    cursor.setUTCHours(0, 0, 0, 0);
+    const endCursor = new Date(end);
+    endCursor.setUTCHours(0, 0, 0, 0);
+    while (cursor <= endCursor) {
+        const dayTime = cursor.getTime();
+        // Baseline %: weighted sum of planned progress for each baseline activity
+        let baselinePct = 0;
+        if (totalBaselineDuration > 0) {
+            for (const act of baselineActivities) {
+                const actStart = new Date(act.startDate).getTime();
+                const actEnd = new Date(act.endDate).getTime();
+                const actDuration = Math.max(1, act.duration);
+                let actPct = 0;
+                if (dayTime >= actEnd) {
+                    actPct = 1;
+                }
+                else if (dayTime > actStart) {
+                    actPct = (dayTime - actStart) / (actEnd - actStart);
+                }
+                baselinePct += actPct * actDuration;
+            }
+            baselinePct = baselinePct / totalBaselineDuration;
+        }
+        // Actual %: current actual % for all days up to today, 0 before start
+        let actualPct = 0;
+        if (dayTime <= today.getTime()) {
+            // Interpolate from 0% at start to currentActualPct at today
+            const totalSpan = Math.max(1, today.getTime() - start.getTime());
+            actualPct = currentActualPct * Math.min(1, (dayTime - start.getTime()) / totalSpan);
+        }
+        // Forecast %: from today onward, project linear completion to 100% by end
+        let forecastPct = 0;
+        if (dayTime >= today.getTime()) {
+            const remainingSpan = Math.max(1, end.getTime() - today.getTime());
+            forecastPct = currentActualPct + (1 - currentActualPct) * ((dayTime - today.getTime()) / remainingSpan);
+        }
+        else {
+            forecastPct = actualPct;
+        }
+        data.push({
+            date: `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}-${String(cursor.getUTCDate()).padStart(2, '0')}`,
+            baselinePct: Math.round(baselinePct * 10000) / 10000,
+            actualPct: Math.round(actualPct * 10000) / 10000,
+            forecastPct: Math.round(forecastPct * 10000) / 10000,
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return { projectId, data };
+}
 async function recalculateSchedule(projectId) {
     const prisma = (0, prisma_1.getPrismaClient)();
     const project = await prisma.project.findUnique({
@@ -174,13 +302,39 @@ async function recalculateSchedule(projectId) {
     if (!projectStart) {
         throw new Error('Project start date not available');
     }
+    // Read relationships from the relational table (source of truth)
+    const relationships = await prisma.activityRelationship.findMany({
+        where: { projectId },
+        select: { predecessorId: true, successorId: true, relationshipType: true, lagDays: true },
+    });
+    // Build predecessor/successor maps from relational data
+    const predMap = new Map();
+    const succMap = new Map();
+    for (const rel of relationships) {
+        const predEntry = {
+            activityId: rel.predecessorId,
+            type: rel.relationshipType,
+            lag: rel.lagDays,
+        };
+        const succEntry = {
+            activityId: rel.successorId,
+            type: rel.relationshipType,
+            lag: rel.lagDays,
+        };
+        if (!predMap.has(rel.successorId))
+            predMap.set(rel.successorId, []);
+        if (!succMap.has(rel.predecessorId))
+            succMap.set(rel.predecessorId, []);
+        predMap.get(rel.successorId).push(predEntry);
+        succMap.get(rel.predecessorId).push(succEntry);
+    }
     const nodes = project.scheduleActivities.map((a) => ({
         id: a.id,
         startDate: a.startDate,
         endDate: a.endDate,
         duration: a.duration,
-        predecessors: a.predecessors || undefined,
-        successors: a.successors || undefined,
+        predecessors: predMap.get(a.id) || undefined,
+        successors: succMap.get(a.id) || undefined,
     }));
     const cpmResult = calculateCpm(nodes, projectStart);
     const updates = [];

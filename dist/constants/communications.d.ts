@@ -17,4 +17,17 @@ export declare const SUBMITTAL_STATUSES: {
 };
 export type SubmittalStatus = (typeof SUBMITTAL_STATUSES)[keyof typeof SUBMITTAL_STATUSES];
 export declare const SUBMITTAL_STATUS_LABELS: Record<SubmittalStatus, string>;
+export declare const MEETING_STATUSES: {
+    readonly DRAFT: "draft";
+    readonly PUBLISHED: "published";
+};
+export type MeetingStatus = (typeof MEETING_STATUSES)[keyof typeof MEETING_STATUSES];
+export declare const MEETING_STATUS_LABELS: Record<MeetingStatus, string>;
+export declare const ACTION_ITEM_STATUSES: {
+    readonly OPEN: "open";
+    readonly IN_PROGRESS: "in_progress";
+    readonly CLOSED: "closed";
+};
+export type ActionItemStatus = (typeof ACTION_ITEM_STATUSES)[keyof typeof ACTION_ITEM_STATUSES];
+export declare const ACTION_ITEM_STATUS_LABELS: Record<ActionItemStatus, string>;
 //# sourceMappingURL=communications.d.ts.map

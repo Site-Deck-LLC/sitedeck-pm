@@ -1,33 +1,23 @@
 import { getPrismaClient } from '../lib/prisma';
 import { getStripeClient } from '../lib/stripe';
 import { BillingAccount } from '@prisma/client';
+import {
+  getPlan,
+  tierForStripePrice,
+  PlanDefinition,
+  PlanTierId,
+  isModuleInPlan,
+  isFeatureInPlan,
+} from '../constants/subscription-tiers';
 
-export interface PlanConfig {
-  tier: 'starter' | 'professional' | 'enterprise';
-  projectLimit: number;
-  modules: string[];
-}
+export type { PlanDefinition, PlanTierId };
 
-const PLANS: Record<string, PlanConfig> = {
-  starter: {
-    tier: 'starter',
-    projectLimit: 3,
-    modules: ['schedule', 'cost', 'dashboard', 'scope'],
-  },
-  professional: {
-    tier: 'professional',
-    projectLimit: Infinity,
-    modules: ['*'],
-  },
-  enterprise: {
-    tier: 'enterprise',
-    projectLimit: Infinity,
-    modules: ['*'],
-  },
-};
-
-export async function getPlanConfig(tier: string): Promise<PlanConfig | null> {
-  return PLANS[tier] || null;
+/**
+ * @deprecated Use `getPlan` from `../constants/subscription-tiers` instead.
+ * Kept for backwards compat — returns the same object shape.
+ */
+export async function getPlanConfig(tier: string): Promise<PlanDefinition | null> {
+  return getPlan(tier);
 }
 
 export async function createBillingAccount(
@@ -51,13 +41,15 @@ export async function createBillingAccount(
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + 14);
 
+  const starter = getPlan('starter')!;
+
   return prisma.billingAccount.create({
     data: {
       orgId,
       stripeCustomerId,
       planTier: 'starter',
       status: 'trialing',
-      projectLimit: PLANS.starter.projectLimit,
+      projectLimit: starter.projectLimit,
       currentPeriodEnd: trialEnd,
     },
   });
@@ -105,7 +97,7 @@ export async function getSubscriptionStatus(orgId: string) {
     return null;
   }
 
-  const plan = PLANS[account.planTier];
+  const plan = getPlan(account.planTier);
   const projectCount = await prisma.project.count({ where: { orgId } });
 
   return {
@@ -131,7 +123,7 @@ export async function canCreateProject(orgId: string): Promise<boolean> {
     return false;
   }
 
-  const plan = PLANS[account.planTier];
+  const plan = getPlan(account.planTier);
   if (!plan) {
     return false;
   }
@@ -157,16 +149,17 @@ export async function isModuleAllowed(
     return false;
   }
 
-  const plan = PLANS[account.planTier];
-  if (!plan) {
-    return false;
-  }
+  return isModuleInPlan(account.planTier, module);
+}
 
-  if (plan.modules.includes('*')) {
-    return true;
-  }
-
-  return plan.modules.includes(module.toLowerCase());
+export async function isFeatureAllowed(
+  orgId: string,
+  feature: string
+): Promise<boolean> {
+  const account = await getBillingAccountByOrgId(orgId);
+  if (!account) return false;
+  if (account.status !== 'active' && account.status !== 'trialing') return false;
+  return isFeatureInPlan(account.planTier, feature);
 }
 
 export async function handleCheckoutCompleted(session: any) {
@@ -182,7 +175,8 @@ export async function handleCheckoutCompleted(session: any) {
   const subResponse = await stripe.subscriptions.retrieve(subscriptionId);
   const subscription = subResponse as any;
 
-  const planTier = mapPriceToTier(subscription.items.data[0]?.price.id);
+  const planTier = tierForStripePrice(subscription.items.data[0]?.price.id);
+  const plan = getPlan(planTier);
 
   await prisma.billingAccount.update({
     where: { orgId },
@@ -190,7 +184,7 @@ export async function handleCheckoutCompleted(session: any) {
       stripeSubscriptionId: subscription.id,
       status: subscription.status,
       planTier,
-      projectLimit: PLANS[planTier]?.projectLimit ?? 3,
+      projectLimit: plan?.projectLimit ?? 3,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
   });
@@ -208,14 +202,15 @@ export async function handleSubscriptionUpdated(subscription: any) {
     throw new Error('Missing orgId in subscription metadata');
   }
 
-  const planTier = mapPriceToTier(subscription.items.data[0]?.price.id);
+  const planTier = tierForStripePrice(subscription.items.data[0]?.price.id);
+  const plan = getPlan(planTier);
 
   await prisma.billingAccount.update({
     where: { orgId },
     data: {
       status: subscription.status,
       planTier,
-      projectLimit: PLANS[planTier]?.projectLimit ?? 3,
+      projectLimit: plan?.projectLimit ?? 3,
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
   });
@@ -241,14 +236,4 @@ export async function handleSubscriptionDeleted(subscription: any) {
       projectLimit: 0,
     },
   });
-}
-
-function mapPriceToTier(priceId: string | undefined): string {
-  const prices: Record<string, string> = {
-    [process.env.STRIPE_PRICE_STARTER || '']: 'starter',
-    [process.env.STRIPE_PRICE_PROFESSIONAL || '']: 'professional',
-    [process.env.STRIPE_PRICE_ENTERPRISE || '']: 'enterprise',
-  };
-
-  return prices[priceId || ''] || 'starter';
 }

@@ -6,6 +6,8 @@ export declare const INBOUND_EVENTS: {
     readonly SAFETY_INCIDENT: "safety-incident";
     readonly FIELD_ISSUE_LOGGED: "field-issue-logged";
     readonly SCHEDULE_CHANGE_REQUESTED: "schedule-change-requested";
+    readonly ATTENDANCE_UPDATED: "attendance-updated";
+    readonly EQUIPMENT_STATUS_UPDATED: "equipment-status-updated";
 };
 export type InboundEvent = (typeof INBOUND_EVENTS)[keyof typeof INBOUND_EVENTS];
 export declare const OUTBOUND_EVENTS: {

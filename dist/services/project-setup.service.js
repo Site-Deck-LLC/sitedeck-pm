@@ -24,6 +24,10 @@ async function runProjectSetup(input) {
         endDate: input.endDate,
         activeMilestones: input.milestones,
         superintendentAssignments: input.superintendentAssignments,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        city: input.city,
+        state: input.state,
     });
     if (input.initialWbsItems && input.initialWbsItems.length > 0) {
         for (const item of input.initialWbsItems) {

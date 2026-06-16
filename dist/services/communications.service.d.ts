@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 export interface CreateRfiInput {
     projectId: string;
     subject: string;
@@ -19,8 +20,8 @@ export declare function createRfi(data: CreateRfiInput): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
     rfiNumber: string;
     subject: string;
@@ -29,15 +30,18 @@ export declare function createRfi(data: CreateRfiInput): Promise<{
     assignedTo: string | null;
     responseText: string | null;
     answeredAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
     sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
 }>;
 export declare function getRfiById(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
     rfiNumber: string;
     subject: string;
@@ -46,15 +50,18 @@ export declare function getRfiById(id: string): Promise<{
     assignedTo: string | null;
     responseText: string | null;
     answeredAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
     sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
 } | null>;
 export declare function getRfiByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
     rfiNumber: string;
     subject: string;
@@ -63,15 +70,18 @@ export declare function getRfiByProject(projectId: string): Promise<{
     assignedTo: string | null;
     responseText: string | null;
     answeredAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
     sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
 }[]>;
 export declare function submitRfi(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
     rfiNumber: string;
     subject: string;
@@ -80,15 +90,18 @@ export declare function submitRfi(id: string): Promise<{
     assignedTo: string | null;
     responseText: string | null;
     answeredAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
     sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
 }>;
 export declare function answerRfi(id: string, responseText: string, answeredBy: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
     rfiNumber: string;
     subject: string;
@@ -97,15 +110,18 @@ export declare function answerRfi(id: string, responseText: string, answeredBy: 
     assignedTo: string | null;
     responseText: string | null;
     answeredAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
     sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
 }>;
 export declare function closeRfi(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string;
     rfiNumber: string;
     subject: string;
@@ -114,8 +130,37 @@ export declare function closeRfi(id: string): Promise<{
     assignedTo: string | null;
     responseText: string | null;
     answeredAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
     sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
+}>;
+export interface UpdateRfiInput {
+    ballInCourt?: string | null;
+    status?: string;
+    assignedTo?: string | null;
+    responseText?: string | null;
+}
+export declare function updateRfi(id: string, data: UpdateRfiInput): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    description: string;
+    rfiNumber: string;
+    subject: string;
+    submittedBy: string;
+    submittedAt: Date | null;
+    assignedTo: string | null;
+    responseText: string | null;
+    answeredAt: Date | null;
+    requiredDate: Date | null;
+    holdOnActivityId: string | null;
+    sourceReference: string | null;
+    ballInCourt: string | null;
+    statusHistory: Prisma.JsonValue | null;
 }>;
 export interface RfiPdfData {
     rfiNumber: string;
@@ -133,81 +178,96 @@ export declare function createSubmittal(data: CreateSubmittalInput): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string | null;
     title: string;
     submittedBy: string;
     submittedAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
+    statusHistory: Prisma.JsonValue | null;
     submittalNumber: string;
     specSection: string | null;
     reviewedBy: string | null;
     reviewedAt: Date | null;
+    reviewComments: string | null;
 }>;
 export declare function getSubmittalById(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string | null;
     title: string;
     submittedBy: string;
     submittedAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
+    statusHistory: Prisma.JsonValue | null;
     submittalNumber: string;
     specSection: string | null;
     reviewedBy: string | null;
     reviewedAt: Date | null;
+    reviewComments: string | null;
 } | null>;
 export declare function getSubmittalsByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string | null;
     title: string;
     submittedBy: string;
     submittedAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
+    statusHistory: Prisma.JsonValue | null;
     submittalNumber: string;
     specSection: string | null;
     reviewedBy: string | null;
     reviewedAt: Date | null;
+    reviewComments: string | null;
 }[]>;
 export declare function submitSubmittal(id: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string | null;
     title: string;
     submittedBy: string;
     submittedAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
+    statusHistory: Prisma.JsonValue | null;
     submittalNumber: string;
     specSection: string | null;
     reviewedBy: string | null;
     reviewedAt: Date | null;
+    reviewComments: string | null;
 }>;
 export declare function reviewSubmittal(id: string, decision: 'approved' | 'rejected' | 'revision_required', reviewedBy: string, notes?: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     description: string | null;
     title: string;
     submittedBy: string;
     submittedAt: Date | null;
+    requiredDate: Date | null;
     holdOnActivityId: string | null;
+    statusHistory: Prisma.JsonValue | null;
     submittalNumber: string;
     specSection: string | null;
     reviewedBy: string | null;
     reviewedAt: Date | null;
+    reviewComments: string | null;
 }>;
 export interface SubmittalPdfData {
     submittalNumber: string;
@@ -222,4 +282,165 @@ export interface SubmittalPdfData {
     projectName: string;
 }
 export declare function getSubmittalPdfData(id: string): Promise<SubmittalPdfData>;
+export interface MeetingAttendee {
+    name: string;
+    role?: string;
+}
+export interface MeetingActionItem {
+    description: string;
+    assignee?: string;
+    dueDate?: string;
+    status?: 'open' | 'in_progress' | 'closed';
+}
+export interface CreateMeetingInput {
+    projectId: string;
+    title: string;
+    meetingDate: Date;
+    location?: string;
+    facilitator?: string;
+    attendees?: MeetingAttendee[];
+    agenda?: string[];
+    minutes?: string;
+    actionItems?: MeetingActionItem[];
+    createdBy: string;
+    status?: 'draft' | 'published';
+}
+export interface UpdateMeetingInput {
+    title?: string;
+    meetingDate?: Date;
+    location?: string;
+    facilitator?: string;
+    attendees?: MeetingAttendee[];
+    agenda?: string[];
+    minutes?: string;
+    actionItems?: MeetingActionItem[];
+    status?: 'draft' | 'published';
+}
+export declare function createMeeting(data: CreateMeetingInput): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    createdBy: string;
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: Prisma.JsonValue | null;
+    agenda: Prisma.JsonValue | null;
+    minutes: string | null;
+    actionItems: Prisma.JsonValue | null;
+}>;
+export declare function getMeetingsByProject(projectId: string, startDate?: Date, endDate?: Date): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    createdBy: string;
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: Prisma.JsonValue | null;
+    agenda: Prisma.JsonValue | null;
+    minutes: string | null;
+    actionItems: Prisma.JsonValue | null;
+}[]>;
+export declare function getMeetingById(id: string): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    createdBy: string;
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: Prisma.JsonValue | null;
+    agenda: Prisma.JsonValue | null;
+    minutes: string | null;
+    actionItems: Prisma.JsonValue | null;
+} | null>;
+export declare function updateMeeting(id: string, data: UpdateMeetingInput): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    createdBy: string;
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: Prisma.JsonValue | null;
+    agenda: Prisma.JsonValue | null;
+    minutes: string | null;
+    actionItems: Prisma.JsonValue | null;
+}>;
+export declare function updateMeetingActionItemStatus(meetingId: string, actionItemIndex: number, status: 'open' | 'in_progress' | 'closed'): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    createdBy: string;
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: Prisma.JsonValue | null;
+    agenda: Prisma.JsonValue | null;
+    minutes: string | null;
+    actionItems: Prisma.JsonValue | null;
+}>;
+export declare function deleteMeeting(id: string): Promise<{
+    id: string;
+    status: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    createdBy: string;
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: Prisma.JsonValue | null;
+    agenda: Prisma.JsonValue | null;
+    minutes: string | null;
+    actionItems: Prisma.JsonValue | null;
+}>;
+export interface MeetingPdfData {
+    title: string;
+    meetingDate: Date;
+    location: string | null;
+    facilitator: string | null;
+    attendees: MeetingAttendee[];
+    agenda: string[];
+    minutes: string | null;
+    actionItems: MeetingActionItem[];
+    status: string;
+    projectName: string;
+}
+export declare function getMeetingPdfData(id: string): Promise<MeetingPdfData>;
+export interface OverdueRfi {
+    id: string;
+    rfiNumber: string;
+    subject: string;
+    requiredDate: Date | string | null;
+    daysOverdue: number;
+    status: string;
+}
+export declare function getOverdueRfis(projectId: string): Promise<OverdueRfi[]>;
+export interface OverdueSubmittal {
+    id: string;
+    submittalNumber: string;
+    title: string;
+    requiredDate: Date | string | null;
+    daysOverdue: number;
+    status: string;
+}
+export declare function getOverdueSubmittals(projectId: string): Promise<OverdueSubmittal[]>;
 //# sourceMappingURL=communications.service.d.ts.map

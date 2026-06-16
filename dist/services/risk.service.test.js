@@ -380,6 +380,7 @@ describe('risk.service', () => {
                     category: 'safety',
                     source: 'safety_incident_webhook',
                     incidentReference: 'inc-001',
+                    recordable: false,
                 }),
             });
             expect(result.score).toBe(1);
@@ -399,6 +400,7 @@ describe('risk.service', () => {
                     probability: 'medium',
                     impact: 'medium',
                     score: 4,
+                    recordable: false,
                 }),
             });
             expect(result.score).toBe(4);
@@ -418,6 +420,7 @@ describe('risk.service', () => {
                     probability: 'high',
                     impact: 'high',
                     score: 9,
+                    recordable: true,
                 }),
             });
             expect(result.score).toBe(9);
@@ -449,6 +452,7 @@ describe('risk.service', () => {
                     probability: 'low',
                     impact: 'medium',
                     score: 2,
+                    recordable: true,
                 }),
             });
             expect(result.score).toBe(2);
@@ -468,6 +472,7 @@ describe('risk.service', () => {
                     probability: 'medium',
                     impact: 'medium',
                     score: 4,
+                    recordable: true,
                 }),
             });
             expect(result.score).toBe(4);

@@ -66,5 +66,13 @@ router.get('/transactions', express_auth_1.requireAuth, (0, express_auth_1.requi
     const result = await costService.getCostTransactionsByProject(req.params.projectId);
     res.json(result);
 }));
+router.get('/cashflow', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.ACCOUNTANT_AP), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const result = await costService.getCashFlow(req.params.projectId);
+    res.json(result);
+}));
+router.get('/forecasts', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.ACCOUNTANT_AP), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const result = await costService.calculateForecasts(req.params.projectId);
+    res.json(result);
+}));
 exports.default = router;
 //# sourceMappingURL=cost.routes.js.map

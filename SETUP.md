@@ -1,3 +1,5 @@
+⚠️ OUTDATED — This setup guide was written for the Supabase era. PM now runs on a self-hosted Postgres container on the VPS. See MIGRATION_PM_TO_VPS.md for the current architecture. This file is preserved for historical reference only.
+
 # SiteDeck PM — Setup & Deploy
 
 ## Step 1: Create a free database (5 minutes)

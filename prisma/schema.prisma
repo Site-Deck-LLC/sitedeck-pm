@@ -55,6 +55,7 @@ model Project {
   ownerReports           OwnerReport[]
   lessonsLearned         LessonLearned[]
   documents              Document[]
+  reworkTasks            ReworkTask[]
 
   @@map("projects")
 }
@@ -163,6 +164,7 @@ model ScheduleActivity {
   status          String    @default("not_started") // not_started, in_progress, complete, delayed
   isMilestone     Boolean   @default(false) @map("is_milestone")
   isCritical      Boolean   @default(false) @map("is_critical")
+  linkedBenchmarkDfowId String?   @map("linked_benchmark_dfow_id")
   totalFloat      Float?    @map("total_float") // in days
   freeFloat       Float?    @map("free_float") // in days
   earlyStart      DateTime? @map("early_start")
@@ -496,6 +498,31 @@ model Issue {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@map("issues")
+}
+
+model ReworkTask {
+  id                 String    @id @default(cuid())
+  projectId          String    @map("project_id")
+  project            Project   @relation(fields: [projectId], references: [id])
+  dfowId             String?   @map("dfow_id")
+  inspectionRecordId String?   @map("inspection_record_id")
+  ncrId              String?   @map("ncr_id")
+  source             String // 'ncr' | 'inspection' | 'manual'
+  sourceEventId      String?   @map("source_event_id")
+  title              String
+  description        String?
+  status             String    @default("open") // open | in_progress | resolved | closed
+  priority           String    @default("medium") // low | medium | high | critical
+  assignedTo         String?   @map("assigned_to")
+  dueDate            DateTime? @map("due_date")
+  resolvedAt         DateTime? @map("resolved_at")
+  createdBy          String    @map("created_by") @default("system")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([projectId, status])
+  @@index([projectId, source])
+  @@map("rework_tasks")
 }
 
 model VoiceMemo {

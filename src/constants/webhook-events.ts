@@ -6,6 +6,8 @@ export const INBOUND_EVENTS = {
   SAFETY_INCIDENT: 'safety-incident',
   FIELD_ISSUE_LOGGED: 'field-issue-logged',
   SCHEDULE_CHANGE_REQUESTED: 'schedule-change-requested',
+  ATTENDANCE_UPDATED: 'attendance-updated',
+  EQUIPMENT_STATUS_UPDATED: 'equipment-status-updated',
 } as const;
 
 export type InboundEvent = (typeof INBOUND_EVENTS)[keyof typeof INBOUND_EVENTS];

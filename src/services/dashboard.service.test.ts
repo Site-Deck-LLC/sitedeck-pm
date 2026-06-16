@@ -14,7 +14,8 @@ import { PrismaClient } from '@prisma/client';
 import { calculateProjectEvm, EvmResult } from './cost.service';
 import { getMaterialsAlertStatus } from './procurement.service';
 import { getIssuesByType } from './integration.service';
-import { getIdleEquipmentOnCriticalPath } from './resource.service';
+import { getRfiByProject } from './communications.service';
+import { getIdleEquipmentOnCriticalPath, getEquipmentDashboardSummary } from './resource.service';
 
 jest.mock('./cost.service', () => ({
   calculateProjectEvm: jest.fn(),
@@ -28,8 +29,13 @@ jest.mock('./integration.service', () => ({
   getIssuesByType: jest.fn(),
 }));
 
+jest.mock('./communications.service', () => ({
+  getRfiByProject: jest.fn(),
+}));
+
 jest.mock('./resource.service', () => ({
   getIdleEquipmentOnCriticalPath: jest.fn(),
+  getEquipmentDashboardSummary: jest.fn(),
 }));
 
 describe('dashboard.service', () => {
@@ -147,17 +153,17 @@ describe('dashboard.service', () => {
       expect(result.summary).toContain('on budget');
     });
 
-    it('returns amber when CPI between 0.9 and 1.0', () => {
+    it('returns amber when CPI between 0.95 and 1.0', () => {
       const evm: EvmResult = {
         bcws: 100_000,
-        bcwp: 90_000,
+        bcwp: 97_000,
         acwp: 100_000,
-        sv: -10_000,
-        cv: -10_000,
-        spi: 0.9,
-        cpi: 0.9,
-        eac: 111_111,
-        vac: -11_111,
+        sv: -3_000,
+        cv: -3_000,
+        spi: 0.97,
+        cpi: 0.97,
+        eac: 103_093,
+        vac: -3_093,
         tcpi: 0,
       };
       const result = getCostTileStatus(evm, ['green']);
@@ -406,10 +412,32 @@ describe('dashboard.service', () => {
 
   describe('getMorningDashboard', () => {
     const mockScheduleActivityFindMany = jest.fn();
+    const mockProjectFindUnique = jest.fn();
+    const mockAttendanceFindUnique = jest.fn();
+    const mockAttendanceFindMany = jest.fn();
+    const mockBudgetLineFindMany = jest.fn();
+    const mockEquipmentFindMany = jest.fn();
+    const mockChangeOrderFindMany = jest.fn();
 
     const mockPrisma = {
       scheduleActivity: {
         findMany: mockScheduleActivityFindMany,
+      },
+      project: {
+        findUnique: mockProjectFindUnique,
+      },
+      attendance: {
+        findUnique: mockAttendanceFindUnique,
+        findMany: mockAttendanceFindMany,
+      },
+      budgetLine: {
+        findMany: mockBudgetLineFindMany,
+      },
+      equipment: {
+        findMany: mockEquipmentFindMany,
+      },
+      changeOrder: {
+        findMany: mockChangeOrderFindMany,
       },
     } as unknown as PrismaClient;
 
@@ -417,6 +445,13 @@ describe('dashboard.service', () => {
       jest.clearAllMocks();
       setPrismaClient(mockPrisma);
       (getIdleEquipmentOnCriticalPath as jest.Mock).mockResolvedValue([]);
+      (getEquipmentDashboardSummary as jest.Mock).mockResolvedValue({
+        totalCount: 3,
+        activeCount: 2,
+        idleCount: 1,
+        totalHours: 120,
+        estimatedDailyCost: 450,
+      });
       (calculateProjectEvm as jest.Mock).mockResolvedValue({
         projectId: 'proj-1',
         totalBudget: 100_000,
@@ -445,11 +480,18 @@ describe('dashboard.service', () => {
         count: 0,
       });
       (getIssuesByType as jest.Mock).mockResolvedValue([]);
+      (getRfiByProject as jest.Mock).mockResolvedValue([]);
+      mockProjectFindUnique.mockResolvedValue({ contractValue: null, startDate: null, endDate: null });
+      mockAttendanceFindUnique.mockResolvedValue(null);
+      mockAttendanceFindMany.mockResolvedValue([]);
+      mockBudgetLineFindMany.mockResolvedValue([]);
+      mockEquipmentFindMany.mockResolvedValue([]);
+      mockChangeOrderFindMany.mockResolvedValue([]);
     });
 
     it('aggregates all six tiles', async () => {
       mockScheduleActivityFindMany.mockResolvedValue([
-        { id: 'act-1', name: 'Foundation', status: 'in_progress', isCritical: true, totalFloat: 2 },
+        { id: 'act-1', name: 'Foundation', status: 'in_progress', isCritical: true, totalFloat: 2, isMilestone: false, endDate: new Date('2026-12-31'), percentComplete: 0.3 },
       ]);
 
       const dashboard = await getMorningDashboard('proj-1', { incidents: 0, openObservations: 0 });
@@ -474,7 +516,7 @@ describe('dashboard.service', () => {
 
     it('reflects red schedule when critical delayed', async () => {
       mockScheduleActivityFindMany.mockResolvedValue([
-        { id: 'act-1', name: 'Foundation', status: 'delayed', isCritical: true, totalFloat: 0 },
+        { id: 'act-1', name: 'Foundation', status: 'delayed', isCritical: true, totalFloat: 0, isMilestone: false, endDate: new Date('2026-12-31'), percentComplete: 0.3 },
       ]);
 
       const dashboard = await getMorningDashboard('proj-1', { incidents: 0, openObservations: 0 });
@@ -484,7 +526,7 @@ describe('dashboard.service', () => {
 
     it('reflects amber schedule when idle equipment on critical path', async () => {
       mockScheduleActivityFindMany.mockResolvedValue([
-        { id: 'act-1', name: 'Foundation', status: 'in_progress', isCritical: true, totalFloat: 5 },
+        { id: 'act-1', name: 'Foundation', status: 'in_progress', isCritical: true, totalFloat: 5, isMilestone: false, endDate: new Date('2026-12-31'), percentComplete: 0.3 },
       ]);
       (getIdleEquipmentOnCriticalPath as jest.Mock).mockResolvedValue([
         {
@@ -536,7 +578,7 @@ describe('dashboard.service', () => {
       mockScheduleActivityFindMany.mockResolvedValue([]);
       (getIssuesByType as jest.Mock).mockImplementation(async (projectId: string, type: string) => {
         if (type === 'client_issue') {
-          return [{ id: 'i-1', status: 'open', dueDate: new Date('2026-12-31') }];
+          return [{ id: 'i-1', status: 'open', dueDate: new Date('2026-12-31'), issueNumber: 'CI-001', title: 'Client issue', priority: 'medium', createdAt: new Date('2026-06-01') }];
         }
         return [];
       });
@@ -551,7 +593,7 @@ describe('dashboard.service', () => {
       mockScheduleActivityFindMany.mockResolvedValue([]);
       (getIssuesByType as jest.Mock).mockImplementation(async (projectId: string, type: string) => {
         if (type === 'client_issue') {
-          return [{ id: 'i-1', status: 'open', dueDate: new Date('2026-01-01') }];
+          return [{ id: 'i-1', status: 'open', dueDate: new Date('2026-01-01'), issueNumber: 'CI-002', title: 'Past due issue', priority: 'high', createdAt: new Date('2026-05-01') }];
         }
         return [];
       });

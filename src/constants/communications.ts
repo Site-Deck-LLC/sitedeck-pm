@@ -35,3 +35,29 @@ export const SUBMITTAL_STATUS_LABELS: Record<SubmittalStatus, string> = {
   [SUBMITTAL_STATUSES.REJECTED]: 'Rejected',
   [SUBMITTAL_STATUSES.REVISION_REQUIRED]: 'Revision Required',
 };
+
+export const MEETING_STATUSES = {
+  DRAFT: 'draft',
+  PUBLISHED: 'published',
+} as const;
+
+export type MeetingStatus = (typeof MEETING_STATUSES)[keyof typeof MEETING_STATUSES];
+
+export const MEETING_STATUS_LABELS: Record<MeetingStatus, string> = {
+  [MEETING_STATUSES.DRAFT]: 'Draft',
+  [MEETING_STATUSES.PUBLISHED]: 'Published',
+};
+
+export const ACTION_ITEM_STATUSES = {
+  OPEN: 'open',
+  IN_PROGRESS: 'in_progress',
+  CLOSED: 'closed',
+} as const;
+
+export type ActionItemStatus = (typeof ACTION_ITEM_STATUSES)[keyof typeof ACTION_ITEM_STATUSES];
+
+export const ACTION_ITEM_STATUS_LABELS: Record<ActionItemStatus, string> = {
+  [ACTION_ITEM_STATUSES.OPEN]: 'Open',
+  [ACTION_ITEM_STATUSES.IN_PROGRESS]: 'In Progress',
+  [ACTION_ITEM_STATUSES.CLOSED]: 'Closed',
+};

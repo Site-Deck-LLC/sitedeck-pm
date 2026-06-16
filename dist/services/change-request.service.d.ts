@@ -12,8 +12,8 @@ export declare function createChangeRequest(data: CreateChangeRequestInput): Pro
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     activityId: string;
     requestedBy: string;
     reasonCode: string;
@@ -27,25 +27,31 @@ export declare function createChangeRequest(data: CreateChangeRequestInput): Pro
 }>;
 export declare function getChangeRequestById(id: string): Promise<({
     project: {
-        id: string;
-        name: string;
-        status: string;
         orgId: string;
+        id: string;
+        status: string;
+        createdAt: Date;
+        name: string;
+        updatedAt: Date;
         structureType: string;
         structureLocked: boolean;
         startDate: Date | null;
         endDate: Date | null;
         activeMilestones: Prisma.JsonValue | null;
         superintendentAssignments: Prisma.JsonValue | null;
-        createdAt: Date;
-        updatedAt: Date;
+        contractValue: Prisma.Decimal | null;
+        trirTarget: number | null;
+        latitude: number | null;
+        longitude: number | null;
+        city: string | null;
+        state: string | null;
     };
 } & {
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     activityId: string;
     requestedBy: string;
     reasonCode: string;
@@ -61,8 +67,8 @@ export declare function getChangeRequestsByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     activityId: string;
     requestedBy: string;
     reasonCode: string;
@@ -78,8 +84,8 @@ export declare function calculateImpact(requestId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     activityId: string;
     requestedBy: string;
     reasonCode: string;
@@ -98,8 +104,8 @@ export declare function decideChangeRequest(requestId: string, decision: 'approv
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
+    updatedAt: Date;
     activityId: string;
     requestedBy: string;
     reasonCode: string;

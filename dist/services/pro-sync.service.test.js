@@ -35,6 +35,12 @@ describe('pro-sync.service', () => {
                 createdAt: new Date('2026-01-01'),
                 structureType: 'WBS',
                 structureLocked: false,
+                contractValue: null,
+                trirTarget: null,
+                latitude: null,
+                longitude: null,
+                city: null,
+                state: null,
             };
             mockSet.mockResolvedValue(undefined);
             await (0, pro_sync_service_1.replicateProjectToFirestore)(project);
@@ -50,6 +56,10 @@ describe('pro-sync.service', () => {
                 superintendent_assignments: [{ userId: 'u1', name: 'Alice' }],
                 org_id: 'org-1',
                 updated_at: new Date('2026-06-01'),
+                latitude: null,
+                longitude: null,
+                city: null,
+                state: null,
             });
         });
         it('handles null optional fields', async () => {
@@ -66,6 +76,12 @@ describe('pro-sync.service', () => {
                 createdAt: new Date('2026-01-01'),
                 structureType: 'COST_CODE',
                 structureLocked: false,
+                contractValue: null,
+                trirTarget: null,
+                latitude: null,
+                longitude: null,
+                city: null,
+                state: null,
             };
             mockSet.mockResolvedValue(undefined);
             await (0, pro_sync_service_1.replicateProjectToFirestore)(project);
@@ -79,6 +95,10 @@ describe('pro-sync.service', () => {
                 superintendent_assignments: null,
                 org_id: 'org-2',
                 updated_at: new Date('2026-06-01'),
+                latitude: null,
+                longitude: null,
+                city: null,
+                state: null,
             });
         });
         it('logs error and does not throw on Firestore failure', async () => {
@@ -96,6 +116,12 @@ describe('pro-sync.service', () => {
                 createdAt: new Date('2026-01-01'),
                 structureType: 'WBS',
                 structureLocked: false,
+                contractValue: null,
+                trirTarget: null,
+                latitude: null,
+                longitude: null,
+                city: null,
+                state: null,
             };
             mockSet.mockRejectedValue(new Error('Firestore down'));
             await expect((0, pro_sync_service_1.replicateProjectToFirestore)(project)).resolves.toBeUndefined();

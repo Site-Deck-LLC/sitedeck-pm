@@ -15,6 +15,10 @@ export interface FirestoreProjectData {
     }[] | null;
     org_id: string;
     updated_at: Date;
+    latitude?: number | null;
+    longitude?: number | null;
+    city?: string | null;
+    state?: string | null;
 }
 export declare function replicateProjectToFirestore(project: Project): Promise<void>;
 export declare function updateFirestoreProject(projectId: string, updates: Partial<FirestoreProjectData>): Promise<void>;

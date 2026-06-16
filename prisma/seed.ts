@@ -42,6 +42,7 @@ async function main() {
     await prisma.closeoutChecklist.deleteMany({ where: { projectId: p.id } });
     await prisma.equipment.deleteMany({ where: { projectId: p.id } });
     await prisma.workBreakdownItem.deleteMany({ where: { projectId: p.id } });
+    await prisma.meeting.deleteMany({ where: { projectId: p.id } });
     await prisma.project.delete({ where: { id: p.id } });
   }
 
@@ -55,6 +56,7 @@ async function main() {
       startDate: START,
       endDate: END,
       status: 'active',
+      trirTarget: 0.8,
       activeMilestones: [
         { name: 'NTP / Notice to Proceed', date: '2026-01-06' },
         { name: 'Substantial Completion', date: '2026-09-25' },
@@ -189,7 +191,7 @@ async function main() {
     actMap[def.name] = created;
   }
 
-  // Second pass: update predecessors
+  // Second pass: update JSON predecessors (backward compat)
   const preds: Record<string, { name: string; type: string; lag: number }[]> = {
     'Mobilization & Site Setup': [{ name: 'NTP / Notice to Proceed', type: 'FS', lag: 0 }],
     'Erosion Control & SWPPP': [{ name: 'NTP / Notice to Proceed', type: 'FS', lag: 0 }],
@@ -203,7 +205,7 @@ async function main() {
     'Formwork & Rebar Install': [{ name: 'Excavation Battery Pads', type: 'FS', lag: 1 }],
     'Spill Containment (Pads)': [{ name: 'Formwork & Rebar Install', type: 'FS', lag: 1 }],
     'Concrete Pour Battery Pads': [{ name: 'Formwork & Rebar Install', type: 'FS', lag: 1 }],
-    'Concrete Cure & Strip Forms': [{ name: 'Concrete Pour Battery Pads', type: 'FS', lag: 1 }],
+    'Concrete Cure & Strip Forms': [{ name: 'Concrete Pour Battery Pads', type: 'FS', lag: 3 }], // concrete cure lag
     'Road Base & Paving': [{ name: 'Concrete Cure & Strip Forms', type: 'FS', lag: 1 }],
     'Pull Boxes & Handholes': [{ name: 'Underground Rough-in', type: 'FS', lag: 1 }],
     'MV Switchgear Delivery': [{ name: 'Rough Grade & Clearing', type: 'FS', lag: 2 }],
@@ -247,6 +249,52 @@ async function main() {
     await prisma.scheduleActivity.update({
       where: { id: act.id },
       data: { predecessors: jsonPreds },
+    });
+  }
+
+  // Third pass: create relational activity_relationships (proper schema)
+  const relDefs: { pred: string; succ: string; type: string; lag: number; constraint: string }[] = [
+    // ── FS relationships (15+)
+    { pred: 'NTP / Notice to Proceed', succ: 'Mobilization & Site Setup', type: 'FS', lag: 0, constraint: 'hard' },
+    { pred: 'NTP / Notice to Proceed', succ: 'Erosion Control & SWPPP', type: 'FS', lag: 0, constraint: 'hard' },
+    { pred: 'Mobilization & Site Setup', succ: 'Temporary Power Setup', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Mobilization & Site Setup', succ: 'Site Fencing & Security', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Erosion Control & SWPPP', succ: 'Rough Grade & Clearing', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Rough Grade & Clearing', succ: 'Storm Drainage Install', type: 'FS', lag: 2, constraint: 'hard' },
+    { pred: 'Rough Grade & Clearing', succ: 'Foundation Layout & Staking', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Foundation Layout & Staking', succ: 'Excavation Battery Pads', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Excavation Battery Pads', succ: 'Formwork & Rebar Install', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Formwork & Rebar Install', succ: 'Concrete Pour Battery Pads', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Concrete Pour Battery Pads', succ: 'Concrete Cure & Strip Forms', type: 'FS', lag: 3, constraint: 'hard' },
+    { pred: 'Concrete Cure & Strip Forms', succ: 'Battery Rack Delivery', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Battery Rack Delivery', succ: 'Battery Rack Install', type: 'FS', lag: 3, constraint: 'hard' },
+    { pred: 'Battery Rack Install', succ: 'DC Cabling & Terminations', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'MV Switchgear Install', succ: 'AC Cabling & Terminations', type: 'FS', lag: 2, constraint: 'hard' },
+    { pred: 'Functional Testing', succ: 'Grid Connection & Sync', type: 'FS', lag: 1, constraint: 'hard' },
+    { pred: 'Grid Connection & Sync', succ: 'Performance Testing', type: 'FS', lag: 1, constraint: 'hard' },
+
+    // ── SS relationships (parallel starts)
+    { pred: 'Excavation Battery Pads', succ: 'Underground Rough-in', type: 'SS', lag: 5, constraint: 'soft' },
+    { pred: 'Formwork & Rebar Install', succ: 'Spill Containment (Pads)', type: 'SS', lag: 3, constraint: 'soft' },
+    { pred: 'Battery Rack Install', succ: 'BMS Wiring & Integration', type: 'SS', lag: 10, constraint: 'soft' },
+
+    // ── Additional lag relationships
+    { pred: 'Transformer Install', succ: 'Grounding System Install', type: 'FS', lag: 2, constraint: 'hard' },
+  ];
+
+  for (const r of relDefs) {
+    const predAct = actMap[r.pred];
+    const succAct = actMap[r.succ];
+    if (!predAct || !succAct) continue;
+    await prisma.activityRelationship.create({
+      data: {
+        projectId: project.id,
+        predecessorId: predAct.id,
+        successorId: succAct.id,
+        relationshipType: r.type,
+        lagDays: r.lag,
+        constraintType: r.constraint,
+      },
     });
   }
 
@@ -831,6 +879,154 @@ Contract value: $8,500,000. Duration: 9 months. NTP: Jan 6, 2026. Substantial Co
         resolvedAt: iss.resolvedAt,
         activityId: iss.activity,
         createdBy: CREATED_BY,
+      },
+    });
+  }
+
+  // ── 17b. Meeting Minutes ──
+  const meetingData = [
+    {
+      title: 'Weekly OAC Meeting — May 27, 2026',
+      date: d('2026-05-27'),
+      location: 'Site Trailer Conference Room',
+      facilitator: 'Robert Chen (SiteDeck PM)',
+      attendees: [
+        { name: 'Sarah Martinez', role: 'Owner Representative' },
+        { name: 'David Kim', role: 'Architect of Record' },
+        { name: 'Robert Chen', role: 'General Contractor PM' },
+        { name: 'Mike Torres', role: 'Site Superintendent' },
+      ],
+      agenda: [
+        'Safety review and incidents since last meeting',
+        'Schedule review — look-ahead 3 weeks',
+        'Change order log review (RFI-2026-005, RFI-2026-008)',
+        'Owner-furnished equipment delivery status',
+        'Substantial completion forecast',
+      ],
+      minutes: `## Safety
+Zero recordable incidents this period. Heat stress protocol in effect — work rest cycles adjusted for >95°F days.
+
+## Schedule
+Civil foundations 4 days behind plan due to Oldcastle concrete shortage (see Action Item #2). Mitigation in place: Turner Civil added second crew. Net delay to substantial completion: 3 days.
+
+## Change Orders
+- RFI-2026-005: Owner requested transformer upsize. Pending engineering review. No cost impact to date.
+- RFI-2026-008: Underground utility conflict at north fence line. Resolution: reroute 150ft of conduit. Cost impact: $12,400, time impact: 2 days. Submitted as PCO-001.
+
+## Owner Furnished Equipment
+- PCS inverters: 8 of 10 units received. Remaining 2 units released from customs May 25. Delivery to site Jun 3.
+- Battery racks: 35 of 40 units staged. Remainder on vessel ETA Jun 8.
+
+## Substantial Completion Forecast
+Currently tracking Sep 28, 2026 (3 days behind original Sep 25). Recovery plan: accelerate BMS commissioning by overlapping with HVAC punch list.`,
+      actionItems: [
+        {
+          description: 'Submit transformer upsize cost analysis to owner',
+          assignee: 'Robert Chen',
+          dueDate: '2026-05-30',
+          status: 'closed',
+        },
+        {
+          description: 'Coordinate Turner Civil pour #4 with Oldcastle — confirm supply before mobilization',
+          assignee: 'Mike Torres',
+          dueDate: '2026-06-01',
+          status: 'closed',
+        },
+        {
+          description: 'File PCO-001 for underground utility conflict',
+          assignee: 'Robert Chen',
+          dueDate: '2026-06-03',
+          status: 'open',
+        },
+        {
+          description: 'Schedule BMS / HVAC overlap meeting with controls sub',
+          assignee: 'Mike Torres',
+          dueDate: '2026-06-10',
+          status: 'open',
+        },
+        {
+          description: 'Owner approval of substantial completion forecast update',
+          assignee: 'Sarah Martinez',
+          dueDate: '2026-06-15',
+          status: 'open',
+        },
+      ],
+      status: 'published',
+      createdBy: CREATED_BY,
+    },
+    {
+      title: 'Subcontractor Coordination Meeting — May 30, 2026',
+      date: d('2026-05-30'),
+      location: 'Site Trailer — Big Room',
+      facilitator: 'Mike Torres (Site Superintendent)',
+      attendees: [
+        { name: 'Mike Torres', role: 'Site Superintendent' },
+        { name: 'James Walker', role: 'Turner Civil PM' },
+        { name: 'Lisa Patel', role: 'Fire Suppression Sub PM' },
+        { name: 'Carlos Diaz', role: 'Electrical Sub Foreman' },
+        { name: 'Robert Chen', role: 'GC PM' },
+        { name: 'Tom Bradley', role: 'BMS Controls Sub PM' },
+      ],
+      agenda: [
+        'Look-ahead: June work windows per sub',
+        'Concrete pour #4 — final coordination',
+        'Electrical switchgear delivery and install sequence',
+        'Fire suppression tie-in schedule',
+        'BMS network and device locations walkdown',
+      ],
+      minutes: `## Look-ahead
+All subs confirmed staffing for June. Turner Civil: 2 crews (12 carpenters). Electrical: 6 IBEW electricians. Fire Suppression: 4 fitters. BMS: 2 techs commissioning.
+
+## Concrete Pour #4
+Scheduled Jun 5, 6:00am. Oldcastle confirmed 320cy available. Backup plant (Redi-Mix) on standby. Pump truck reserved. Cylinder break schedule: 3, 7, 28 days.
+
+## Electrical Switchgear
+Sungrow PCS units 9-10 arrive Jun 3. MVT-001 transformer delivery Jun 7. Switchgear lineup install Jun 8-12. Coordination needed with fire suppression rough-in (overhead conflict at PCS pad #4).
+
+## Fire Suppression Tie-in
+Detection wire pulls Jun 9-11. Agent cylinders staged Jun 13. Pre-test Jun 15. Tie-in to fire alarm panel Jun 18.
+
+## BMS Walkdown
+Network topology confirmed: fiber backbone from control house to 4 PCS pads. Device locations marked at 100%. Conduit installation Jun 11-14.`,
+      actionItems: [
+        {
+          description: 'Confirm pump truck and backup concrete plant mobilization for Jun 5 pour',
+          assignee: 'James Walker',
+          dueDate: '2026-06-04',
+          status: 'closed',
+        },
+        {
+          description: 'Resolve overhead conflict between fire suppression piping and PCS pad #4 conduit',
+          assignee: 'Lisa Patel',
+          dueDate: '2026-06-12',
+          status: 'open',
+        },
+        {
+          description: 'Coordinate BMS fiber pull with PCS pad commissioning sequence',
+          assignee: 'Tom Bradley',
+          dueDate: '2026-06-14',
+          status: 'open',
+        },
+      ],
+      status: 'published',
+      createdBy: CREATED_BY,
+    },
+  ];
+
+  for (const m of meetingData) {
+    await prisma.meeting.create({
+      data: {
+        projectId: project.id,
+        title: m.title,
+        meetingDate: m.date,
+        location: m.location,
+        facilitator: m.facilitator,
+        attendees: m.attendees,
+        agenda: m.agenda,
+        minutes: m.minutes,
+        actionItems: m.actionItems,
+        status: m.status,
+        createdBy: m.createdBy,
       },
     });
   }

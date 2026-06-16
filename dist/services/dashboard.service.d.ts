@@ -19,6 +19,104 @@ export interface MorningDashboard {
         clientIssues: DashboardTile;
         fieldIssues: DashboardTile;
     };
+    projectValue: number | null;
+    crew: {
+        speciality: number;
+        general: number;
+        equipment: number;
+        equipmentActive: number;
+        equipmentIdle: number;
+        dailyBurnRate: number;
+    };
+    upcoming: {
+        nextMilestone: {
+            name: string;
+            daysLeft: number;
+            taskValue: number;
+        } | null;
+        nextCheckpoint: {
+            name: string;
+            daysLeft: number;
+            taskCount: number;
+        } | null;
+        nextDraw: {
+            name: string;
+            daysLeft: number;
+            drawValue: number;
+        } | null;
+    };
+    performance: {
+        cpi: number;
+        spi: number;
+        costVariance: number;
+        scheduleVariance: number;
+        costBars: {
+            label: string;
+            planned: number;
+            actual: number;
+            color: string;
+        }[];
+        effortBars: {
+            label: string;
+            planned: number;
+            actual: number;
+            color: string;
+        }[];
+    };
+    healthTiles: DashboardTile[];
+    communications: {
+        rfis: {
+            id: string;
+            number: string;
+            recordId: string;
+            subject: string;
+            status: string;
+            date: string;
+        }[];
+        fieldIssues: {
+            id: string;
+            title: string;
+            status: string;
+            priority: string;
+            date: string;
+        }[];
+    };
+    changeOrders: {
+        approved: number;
+        pending: number;
+        approvedCost: number;
+        approvedSchedule: number;
+        pendingCost: number;
+        pendingSchedule: number;
+    };
+    metrics: {
+        plannedDays: number;
+        plannedEffort: number;
+        completedPct: number;
+    };
+    taskDays: {
+        actualDays: number;
+        estimateDays: number;
+        totalDays: number;
+        completedPct: number;
+    };
+    financialOverview: {
+        bidValue: {
+            taskCost: number;
+            overhead: number;
+            profit: number;
+        };
+        currentValue: {
+            taskCost: number;
+            overhead: number;
+            profit: number;
+        };
+    };
+    quickActions: {
+        label: string;
+        iconKey: string;
+        color: string;
+    }[];
 }
 export interface SafetyData {
     incidents: number;

@@ -17,13 +17,17 @@
  *     `helper@modestintent.com` is DKIM-signed. Receiving MTAs
  *     (Gmail, Outlook) will see `dkim=pass` and not flag as spam.
  *
- * Scope: internal operational alerts only. Customer-facing mail
- * (welcome emails, RFI alerts to external recipients, owner
- * reports) currently also goes through this transport, with a
- * `Reply-To: support@sitedeck.pro` so the user can still respond
- * to a real address. Once `sitedeck.pro` has SPF + DKIM + DMARC
- * published in DNS and OpenDKIM signs `*@sitedeck.pro`, swap
- * `MAIL_FROM` to `support@sitedeck.pro` and we're done.
+ * Sprint 11: a second mailbox `notifications@sitedeck.pro` was added
+ *   and OpenDKIM now signs `*@sitedeck.pro`. When the user publishes
+ *   the SPF/DKIM/DMARC records in Cloudflare (see SPRINT_11_LOG.md
+ *   Task 3), customer-facing mail switches to sendEmailSitedeck().
+ *   Before DNS propagation, that function falls back to the internal
+ *   From address (graceful degradation — same pattern as before).
+ *
+ * Scope: internal operational alerts only by default. Customer-facing
+ * mail (welcome emails, RFI alerts to external recipients, owner
+ * reports) uses sendEmailSitedeck() with `Reply-To: support@sitedeck.pro`
+ * so the user can respond to a real address.
  *
  * Standalone degradation: sendEmail() NEVER throws. Failures are
  * logged at `console.warn` and the caller continues. The toast /
@@ -35,43 +39,68 @@ import nodemailer, { Transporter } from 'nodemailer';
 
 let cachedTransport: Transporter | null = null;
 let transportBuilt = false;
+let cachedSitedeckTransport: Transporter | null = null;
+let sitedeckTransportBuilt = false;
 
-function getTransport(): Transporter | null {
-  if (transportBuilt) return cachedTransport;
-  transportBuilt = true;
-
+function buildTransport(userEnv: string, passEnv: string, servername: string): Transporter | null {
   const host = process.env.MAIL_HOST;
-  if (!host) {
-    // Graceful fallback: no transport, calls go to console.log.
-    return (cachedTransport = null);
-  }
-
+  if (!host) return null;
   try {
-    cachedTransport = nodemailer.createTransport({
+    return nodemailer.createTransport({
       host,
       port: parseInt(process.env.MAIL_PORT || '587', 10),
       secure: false, // STARTTLS on 587
       auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
+        user: process.env[userEnv],
+        pass: process.env[passEnv],
       },
       tls: {
-        // Cert is CN=mail.modestintent.com. We're connecting to
-        // 127.0.0.1, so we have to set servername explicitly for
-        // SNI / hostname verification to match the cert.
-        servername: 'mail.modestintent.com',
+        // Cert is CN=mail.modestintent.com. We connect to 127.0.0.1,
+        // so servername is required for SNI / hostname verification.
+        servername,
         rejectUnauthorized: true,
       },
     });
   } catch (err: any) {
     console.warn('[email] failed to build transport:', err?.message || err);
-    cachedTransport = null;
+    return null;
   }
+}
+
+function getTransport(): Transporter | null {
+  if (transportBuilt) return cachedTransport;
+  transportBuilt = true;
+  cachedTransport = buildTransport('MAIL_USER', 'MAIL_PASS', 'mail.modestintent.com');
   return cachedTransport;
 }
 
+/**
+ * Sprint 11: a second transport for sitedeck.pro customer mail.
+ * Uses a separate SASL account (notifications@sitedeck.pro) so
+ * OpenDKIM signs with the sitedeck.pro key.
+ *
+ * Falls back to the internal helper@ transport when
+ * MAIL_SITEDECK_USER is not set — same graceful-degradation
+ * pattern as the no-MAIL_HOST path.
+ */
+function getSitedeckTransport(): Transporter | null {
+  if (sitedeckTransportBuilt) return cachedSitedeckTransport;
+  sitedeckTransportBuilt = true;
+  if (!process.env.MAIL_SITEDECK_USER) {
+    // Fall back to the internal transport when no separate sitedeck auth.
+    cachedSitedeckTransport = getTransport();
+  } else {
+    cachedSitedeckTransport = buildTransport('MAIL_SITEDECK_USER', 'MAIL_SITEDECK_PASS', 'mail.modestintent.com');
+  }
+  return cachedSitedeckTransport;
+}
+
 const FROM_DEFAULT = 'SiteDeck Helper <helper@modestintent.com>';
+const FROM_SITEDECK_DEFAULT = 'SiteDeck <noreply@sitedeck.pro>';
 const FROM_EMAIL = process.env.MAIL_FROM || FROM_DEFAULT;
+// Sprint 11: customer-facing mail uses sitedeck.pro once DNS is in.
+// Until then it falls back to FROM_EMAIL (same graceful-degradation path).
+const FROM_SITEDECK = process.env.MAIL_FROM_SITEDECK || FROM_SITEDECK_DEFAULT;
 const REPLY_TO = process.env.MAIL_REPLY_TO || 'support@sitedeck.pro';
 
 // Test-only cache reset. Production callers should never invoke this.
@@ -79,6 +108,8 @@ export const __test__ = {
   resetTransport(): void {
     cachedTransport = null;
     transportBuilt = false;
+    cachedSitedeckTransport = null;
+    sitedeckTransportBuilt = false;
   },
 };
 
@@ -142,6 +173,51 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 }
 
+/**
+ * Send an email with the sitedeck.pro From header. Used for
+ * customer-facing messages (welcome, owner report, RFI to external
+ * recipients) so they appear to come from a brand-correct address.
+ *
+ * Uses a separate SASL account (notifications@sitedeck.pro) so
+ * OpenDKIM signs with the sitedeck.pro private key. If
+ * `MAIL_SITEDECK_USER` is not configured, falls back to the
+ * internal helper@modestintent.com transport — same graceful-
+ * degradation path as the no-transport fallback.
+ *
+ * DNS / DKIM for sitedeck.pro is the user-side dependency; see
+ * SPRINT_11_LOG.md Task 3. Until SPF/DKIM/DMARC are published,
+ * receiving MTAs may flag the mail as soft-fail.
+ */
+export async function sendEmailSitedeck(input: SendEmailInput): Promise<SendEmailResult> {
+  const recipients = Array.isArray(input.to) ? input.to : [input.to];
+  if (recipients.length === 0) {
+    return { ok: false, sent: 0, messageId: null, fallback: false, error: 'no recipients' };
+  }
+  const transport = getSitedeckTransport();
+  if (!transport) {
+    console.warn(
+      `[email/sitedeck] no transport — would have sent from=${FROM_SITEDECK} to=${recipients.join(',')} subject="${input.subject}"`
+    );
+    return { ok: true, sent: recipients.length, messageId: null, fallback: true };
+  }
+  try {
+    const info = await transport.sendMail({
+      from: process.env.MAIL_FROM_SITEDECK ? FROM_SITEDECK : FROM_EMAIL,
+      to: input.bcc && recipients.length > 1 ? recipients[0] : recipients,
+      cc: undefined,
+      bcc: input.bcc && recipients.length > 1 ? recipients.slice(1) : undefined,
+      replyTo: REPLY_TO,
+      subject: input.subject,
+      text: input.text,
+      html: input.html,
+    });
+    return { ok: true, sent: recipients.length, messageId: info?.messageId || null, fallback: false };
+  } catch (err: any) {
+    console.warn('[email/sitedeck] send failed:', err?.message || err);
+    return { ok: false, sent: 0, messageId: null, fallback: false, error: err?.message || 'unknown' };
+  }
+}
+
 // ─── Convenience senders ────────────────────────────────────────────────
 //
 // All callers go through sendEmail() so the graceful-fallback path
@@ -155,7 +231,7 @@ export async function sendRfiOverdueAlert(input: {
   daysOpen: number;
   link: string;
 }): Promise<SendEmailResult> {
-  return sendEmail({
+  return sendEmailSitedeck({
     to: input.recipientEmail,
     subject: `RFI Follow-Up Required: ${input.rfiNumber}`,
     text: `RFI ${input.rfiNumber} on project "${input.projectName}" is ${input.daysOpen} days open and still requires a response.\n\nView in SiteDeck PM: ${input.link}\n`,
@@ -169,7 +245,7 @@ export async function sendOwnerReportReady(input: {
   weekEnding: string;
   link: string;
 }): Promise<SendEmailResult> {
-  return sendEmail({
+  return sendEmailSitedeck({
     to: input.ownerEmail,
     subject: `Weekly Status Report: ${input.projectName}`,
     text: `Your weekly status report for "${input.projectName}" (week ending ${input.weekEnding}) is ready.\n\nView in SiteDeck PM: ${input.link}\n`,
@@ -185,7 +261,7 @@ export async function sendDrawingIFCRelease(input: {
   recipientEmails: string[];
   link: string;
 }): Promise<SendEmailResult> {
-  return sendEmail({
+  return sendEmailSitedeck({
     to: input.recipientEmails,
     subject: `IFC Drawing Released: ${input.drawingNumber}`,
     text: `${input.drawingNumber} Rev ${input.revision} — ${input.title}\nReleased for construction on project "${input.projectName}".\n\nDownload in SiteDeck PM: ${input.link}\n`,
@@ -200,10 +276,10 @@ export async function sendWelcomeEmail(input: {
   role: string;
   loginLink: string;
 }): Promise<SendEmailResult> {
-  // Customer-facing today. When sitedeck.pro DNS / DKIM is in place,
-  // swap MAIL_FROM in /opt/sitedeck-pm/.env to support@sitedeck.pro —
-  // no code change required.
-  return sendEmail({
+  // Customer-facing. When MAIL_FROM_SITEDECK is set, the From header
+  // is `SiteDeck <noreply@sitedeck.pro>`; otherwise it falls back to
+  // the internal helper@modestintent.com (no code change needed).
+  return sendEmailSitedeck({
     to: input.recipientEmail,
     subject: `You've been added to ${input.projectName}`,
     text: `Welcome to ${input.projectName}, ${input.displayName}.\n\nYou have been added with the role: ${input.role}.\nSign in to SiteDeck PM: ${input.loginLink}\n`,
@@ -220,7 +296,7 @@ export async function sendNCRAlert(input: {
   benchmarkLink?: string;
 }): Promise<SendEmailResult> {
   const text = `NCR ${input.ncrNumber} opened on project "${input.projectName}".\nSeverity: ${input.severity}\nDFOW: ${input.dfow}\n${input.benchmarkLink ? `View in Benchmark: ${input.benchmarkLink}\n` : ''}`;
-  return sendEmail({
+  return sendEmailSitedeck({
     to: input.recipientEmail,
     subject: `NCR Opened: ${input.ncrNumber} — Action Required`,
     text,

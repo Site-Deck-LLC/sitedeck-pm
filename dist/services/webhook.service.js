@@ -7,6 +7,8 @@ exports.handleEquipmentUsageLogged = handleEquipmentUsageLogged;
 exports.handleSafetyIncident = handleSafetyIncident;
 exports.handleFieldIssueLogged = handleFieldIssueLogged;
 exports.handleScheduleChangeRequested = handleScheduleChangeRequested;
+exports.handleAttendanceUpdated = handleAttendanceUpdated;
+exports.handleEquipmentStatusUpdated = handleEquipmentStatusUpdated;
 exports.sendActivityReady = sendActivityReady;
 exports.sendMaterialNeeded = sendMaterialNeeded;
 exports.sendRfiStatusUpdated = sendRfiStatusUpdated;
@@ -320,6 +322,74 @@ async function handleScheduleChangeRequested(payload) {
         });
         await logWebhookEvent(event, 'inbound', payload, 'processed');
         return { success: true, message: 'Schedule change request created' };
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        await logWebhookEvent(event, 'inbound', payload, 'failed');
+        return { success: false, message };
+    }
+}
+async function handleAttendanceUpdated(payload) {
+    const event = webhook_events_1.INBOUND_EVENTS.ATTENDANCE_UPDATED;
+    try {
+        if (await isDuplicateEvent(event, payload)) {
+            await logWebhookEvent(event, 'inbound', payload, 'duplicate');
+            return { success: true, message: 'Duplicate event ignored' };
+        }
+        const projectId = payload.project_id;
+        const date = payload.date ? new Date(payload.date) : new Date();
+        const workerCount = payload.worker_count;
+        const hours = payload.hours;
+        if (!projectId || workerCount === undefined || hours === undefined) {
+            await logWebhookEvent(event, 'inbound', payload, 'failed');
+            return { success: false, message: 'Missing project_id, worker_count, or hours' };
+        }
+        await (0, resource_service_1.upsertAttendance)(projectId, date, workerCount, hours);
+        await logWebhookEvent(event, 'inbound', payload, 'processed');
+        return { success: true, message: 'Attendance recorded' };
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        await logWebhookEvent(event, 'inbound', payload, 'failed');
+        return { success: false, message };
+    }
+}
+async function handleEquipmentStatusUpdated(payload) {
+    const event = webhook_events_1.INBOUND_EVENTS.EQUIPMENT_STATUS_UPDATED;
+    try {
+        if (await isDuplicateEvent(event, payload)) {
+            await logWebhookEvent(event, 'inbound', payload, 'duplicate');
+            return { success: true, message: 'Duplicate event ignored' };
+        }
+        const projectId = payload.project_id;
+        const externalId = payload.equipment_id;
+        const status = payload.status;
+        const dailyRate = payload.daily_rate;
+        if (!projectId || !externalId || !status) {
+            await logWebhookEvent(event, 'inbound', payload, 'failed');
+            return { success: false, message: 'Missing project_id, equipment_id, or status' };
+        }
+        await (0, resource_service_1.upsertEquipment)({
+            projectId,
+            externalId,
+            name: payload.equipment_name || externalId,
+            type: payload.equipment_type,
+        });
+        const prisma = (0, prisma_1.getPrismaClient)();
+        const equipment = await prisma.equipment.findUnique({
+            where: { projectId_externalId: { projectId, externalId } },
+        });
+        if (equipment) {
+            await prisma.equipment.update({
+                where: { id: equipment.id },
+                data: { status },
+            });
+        }
+        if (dailyRate !== undefined) {
+            await (0, resource_service_1.setEquipmentDailyRate)(projectId, externalId, dailyRate);
+        }
+        await logWebhookEvent(event, 'inbound', payload, 'processed');
+        return { success: true, message: 'Equipment status updated' };
     }
     catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';

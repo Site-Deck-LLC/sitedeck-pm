@@ -40,6 +40,8 @@ const async_handler_1 = require("../lib/async-handler");
 const projectService = __importStar(require("../services/project.service"));
 const billingService = __importStar(require("../services/billing.service"));
 const error_handler_1 = require("../lib/error-handler");
+const benchmark_webhook_service_1 = require("../services/benchmark-webhook.service");
+const benchmark_activity_service_1 = require("../services/benchmark-activity.service");
 const router = (0, express_1.Router)();
 router.post('/', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const orgId = req.body.orgId;
@@ -56,10 +58,26 @@ router.post('/', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(rol
         throw (0, error_handler_1.mapServiceErrorToApiError)(new Error('Project limit reached for current plan. Upgrade to create more projects.'));
     }
     const result = await projectService.createProject(req.body);
+    // Fire the Benchmark webhook (fire-and-forget; never blocks the
+    // response). If PM_BENCHMARK_WEBHOOK_URL is unset, this is a no-op.
+    (0, benchmark_webhook_service_1.emitProjectCreated)((0, benchmark_webhook_service_1.buildProjectCreatedEvent)(orgId, {
+        id: result.id,
+        name: result.name,
+        structureType: result.structureType,
+        startDate: result.startDate,
+        endDate: result.endDate,
+        city: result.city,
+        state: result.state,
+        createdAt: result.createdAt,
+    }));
     res.status(201).json(result);
 }));
 router.get('/', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (_req, res) => {
     const projects = await projectService.listProjects();
+    res.json(projects);
+}));
+router.get('/map', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (_req, res) => {
+    const projects = await projectService.getProjectMapData();
     res.json(projects);
 }));
 router.get('/:id', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (req, res) => {
@@ -77,6 +95,10 @@ router.delete('/:id', express_auth_1.requireAuth, (0, express_auth_1.requireRole
 router.post('/:id/wbs-items', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const result = await projectService.addWorkBreakdownItem(req.params.id, req.body);
     res.status(201).json(result);
+}));
+router.get('/:id/benchmark-activity', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER, roles_1.ROLES.SUPERINTENDENT, roles_1.ROLES.OWNERS_REP), (0, async_handler_1.asyncHandler)(async (req, res) => {
+    const events = await (0, benchmark_activity_service_1.getBenchmarkActivityForProject)(req.params.id);
+    res.json({ events });
 }));
 router.post('/:id/lock-structure', express_auth_1.requireAuth, (0, express_auth_1.requireRole)(roles_1.ROLES.OWNER_ADMIN, roles_1.ROLES.PROJECT_MANAGER), (0, async_handler_1.asyncHandler)(async (req, res) => {
     const result = await projectService.lockProjectStructure(req.params.id);

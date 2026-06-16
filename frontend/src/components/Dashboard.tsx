@@ -28,6 +28,7 @@ import { SubmittalDetailView } from './SubmittalDetailView';
 import { ChangeOrderDetailView } from './ChangeOrderDetailView';
 import { RiskIntelligencePanel } from './RiskIntelligencePanel';
 import { ForecastCard } from './ForecastCard';
+import { BenchmarkActivity } from './BenchmarkActivity';
 import { ProjectSidebar, type ProjectNavItem } from './ProjectSidebar';
 import type { ConnectedProductsState } from './ConnectedProducts';
 import type { SidebarUser } from './Sidebar';
@@ -950,6 +951,11 @@ export function Dashboard({
               {/* ── Row 1b: Risk Intelligence (full width) — Sprint 11 Task 7 ── */}
               <Card title="Risk Intelligence">
                 <RiskIntelligencePanel projectId={projectId} />
+              </Card>
+
+              {/* ── Row 1c: Benchmark Activity (full width) — Sprint 13 Task 6 ── */}
+              <Card title="Benchmark Activity">
+                <BenchmarkActivity projectId={projectId} />
               </Card>
 
               {/* ── Row 2: Six tiles (2×3) | Project Metrics | Upcoming ── */}

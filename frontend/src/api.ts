@@ -636,3 +636,17 @@ export function getChangeOrderPdfUrl(projectId: string, coId: string): string {
 export function getAsBuiltPdfUrl(projectId: string): string {
   return withToken(`/api/v1/projects/${projectId}/redlines/as-built-pdf`);
 }
+
+// ── Benchmark Integration ──
+export function sendActivityToBenchmark(projectId: string, activityId: string, dfowId: string) {
+  return fetchApi(`/api/v1/projects/${projectId}/schedule/activities/${activityId}/send-to-benchmark`, {
+    method: 'POST',
+    body: JSON.stringify({ dfowId }),
+  });
+}
+
+export function getBenchmarkActivity(projectId: string) {
+  return fetchApi<{ events: Array<{ id: string; type: string; description: string; timestamp: string }> }>(
+    `/api/v1/projects/${projectId}/benchmark-activity`
+  );
+}

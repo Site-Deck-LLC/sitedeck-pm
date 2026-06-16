@@ -71,20 +71,20 @@ export const BORDERS = {
 
 export const STATUS_COLORS: Record<string, { bg: string; border: string; text: string; light: string }> = {
   green: {
-    bg: '#22A06B',
-    border: '#22A06B',
+    bg: '#22C55E',
+    border: '#22C55E',
     text: '#FFFFFF',
     light: '#E3F0E9',
   },
   amber: {
-    bg: '#D68A00',
-    border: '#D68A00',
+    bg: '#F59E0B',
+    border: '#F59E0B',
     text: '#FFFFFF',
     light: '#FDF3E0',
   },
   red: {
-    bg: '#C9372D',
-    border: '#C9372D',
+    bg: '#EF4444',
+    border: '#EF4444',
     text: '#FFFFFF',
     light: '#FCEAE8',
   },

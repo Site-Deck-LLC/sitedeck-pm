@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_CLOSEOUT_ITEMS = void 0;
 exports.createIssue = createIssue;
@@ -7,8 +40,10 @@ exports.getIssuesByProject = getIssuesByProject;
 exports.getIssuesByType = getIssuesByType;
 exports.updateIssue = updateIssue;
 exports.resolveIssue = resolveIssue;
+exports.appendIssueNote = appendIssueNote;
 exports.closeIssue = closeIssue;
 exports.getIssuePdfData = getIssuePdfData;
+exports.voiceToIssue = voiceToIssue;
 exports.createVoiceMemo = createVoiceMemo;
 exports.processVoiceMemo = processVoiceMemo;
 exports.getVoiceMemosByProject = getVoiceMemosByProject;
@@ -24,6 +59,7 @@ exports.getCloseoutChecklist = getCloseoutChecklist;
 exports.completeChecklistItem = completeChecklistItem;
 exports.getCloseoutProgress = getCloseoutProgress;
 const prisma_1 = require("../lib/prisma");
+const client_1 = require("@prisma/client");
 const integration_1 = require("../constants/integration");
 exports.DEFAULT_CLOSEOUT_ITEMS = [
     { id: '1', name: 'Punch list complete', category: integration_1.CLOSEOUT_CATEGORIES.TECHNICAL, completed: false },
@@ -63,7 +99,7 @@ async function generateIssueNumber(projectId) {
 async function createIssue(data) {
     const prisma = (0, prisma_1.getPrismaClient)();
     const issueNumber = await generateIssueNumber(data.projectId);
-    return prisma.issue.create({
+    const created = await prisma.issue.create({
         data: {
             projectId: data.projectId,
             issueNumber,
@@ -79,6 +115,20 @@ async function createIssue(data) {
             createdBy: data.createdBy,
         },
     });
+    // Notification: when an issue is created with an assignee, that
+    // person gets a bell. We only fire on initial create — re-assigns
+    // use updateIssue below.
+    if (created.assignee && created.assignee !== data.createdBy) {
+        const { createNotificationSafe } = await Promise.resolve().then(() => __importStar(require('./notifications.service')));
+        await createNotificationSafe({
+            userId: created.assignee,
+            kind: 'issue_assigned',
+            title: `Issue ${created.issueNumber} assigned to you`,
+            body: created.title,
+            payload: { projectId: created.projectId, issueId: created.id, issueNumber: created.issueNumber },
+        });
+    }
+    return created;
 }
 async function getIssueById(id) {
     const prisma = (0, prisma_1.getPrismaClient)();
@@ -109,7 +159,7 @@ async function updateIssue(id, data) {
     if (!existing) {
         throw new Error('Issue not found');
     }
-    return prisma.issue.update({
+    const updated = await prisma.issue.update({
         where: { id },
         data: {
             type: data.type,
@@ -122,6 +172,22 @@ async function updateIssue(id, data) {
             dueDate: data.dueDate,
         },
     });
+    // Notification: when an issue is re-assigned to a new person,
+    // notify them. We only fire when the assignee actually changed
+    // and is non-empty.
+    if (data.assignee !== undefined &&
+        data.assignee &&
+        data.assignee !== existing.assignee) {
+        const { createNotificationSafe } = await Promise.resolve().then(() => __importStar(require('./notifications.service')));
+        await createNotificationSafe({
+            userId: data.assignee,
+            kind: 'issue_assigned',
+            title: `Issue ${updated.issueNumber} assigned to you`,
+            body: updated.title,
+            payload: { projectId: updated.projectId, issueId: updated.id, issueNumber: updated.issueNumber },
+        });
+    }
+    return updated;
 }
 async function resolveIssue(id, resolvedBy) {
     const prisma = (0, prisma_1.getPrismaClient)();
@@ -137,6 +203,27 @@ async function resolveIssue(id, resolvedBy) {
             status: integration_1.ISSUE_STATUSES.RESOLVED,
             resolvedAt: new Date(),
         },
+    });
+}
+async function appendIssueNote(input) {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    const existing = await prisma.issue.findUnique({ where: { id: input.issueId } });
+    if (!existing) {
+        throw new Error('Issue not found');
+    }
+    const prior = existing.notes || [];
+    const next = [
+        ...prior,
+        {
+            id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text: input.text,
+            author: input.author,
+            createdAt: new Date().toISOString(),
+        },
+    ];
+    return prisma.issue.update({
+        where: { id: input.issueId },
+        data: { notes: next },
     });
 }
 async function closeIssue(id) {
@@ -180,7 +267,30 @@ async function getIssuePdfData(id) {
         updatedAt: issue.updatedAt,
     };
 }
-// Voice-to-Issue
+/**
+ * Stub for voice-to-issue flow. Persists a voice memo with status 'pending'
+ * so the iOS / web client can hand off audio for background transcription.
+ * The actual STT + LLM extraction lives in a later sprint — for V1 the UI
+ * just shows "Voice logging coming soon" and records the attempt.
+ */
+async function voiceToIssue(input) {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    const memo = await prisma.voiceMemo.create({
+        data: {
+            projectId: input.projectId,
+            audioUrl: input.audioUrl || '',
+            transcription: '',
+            structuredData: client_1.Prisma.JsonNull,
+            status: integration_1.VOICE_MEMO_STATUSES.PENDING,
+            createdBy: input.createdBy,
+        },
+    });
+    return {
+        status: 'pending',
+        memoId: memo.id,
+        message: 'Voice memo recorded. Transcription will be processed in a future release.',
+    };
+}
 async function createVoiceMemo(data) {
     const prisma = (0, prisma_1.getPrismaClient)();
     return prisma.voiceMemo.create({

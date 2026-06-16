@@ -117,6 +117,29 @@ router.post(
 );
 
 router.post(
+  '/bugs/:id/reject',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) { res.status(404).json({ error: 'not found' }); return; }
+    const prisma = getPrismaClient();
+    const reason = String(req.body?.reason || '').trim();
+    if (!reason) { res.status(400).json({ error: 'reason required' }); return; }
+    const bug = await prisma.bugReport.update({
+      where: { id: req.params.id },
+      data: { status: 'closed' },
+    });
+    const { logOpsAction } = await import('../ops/audit-log');
+    await logOpsAction({
+      action: 'fix_rejected',
+      performedBy: req.user.uid,
+      targetType: 'bug',
+      targetId: bug.id,
+      details: { reason },
+    });
+    res.json({ ok: true, status: 'closed', reason });
+  })
+);
+
+router.post(
   '/bugs/:id/send-approval',
   asyncHandler(async (req: Request, res: Response) => {
     const result = await sendApprovalEmail(req.params.id);
@@ -193,6 +216,149 @@ router.get(
       take: 500,
     });
     res.json(members);
+  })
+);
+
+// ─── User management: change role, reset password, disable/enable ────────────
+// All routes 404 on every failure path (admin security rule).
+
+router.patch(
+  '/users/:id/role',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) { res.status(404).json({ error: 'not found' }); return; }
+    const prisma = getPrismaClient();
+    const member = await prisma.organizationMember.findUnique({ where: { id: req.params.id } });
+    if (!member || !member.userId) { res.status(404).json({ error: 'not found' }); return; }
+    const newRole = String(req.body?.role || '');
+    const VALID = ['owner_admin', 'project_manager', 'superintendent', 'supervisor', 'field_crew', 'subcontractor_pm', 'subcontractor_super', 'owners_rep', 'accountant_ap'];
+    if (!VALID.includes(newRole)) { res.status(400).json({ error: 'invalid role' }); return; }
+
+    try {
+      const { getUserClaims, setUserProjectClaims } = await import('../services/auth.service');
+      const current = await getUserClaims(member.userId);
+      if (!current) {
+        // First-time claim set — seed with this member's orgId and empty project list
+        await setUserProjectClaims(member.userId, { role: newRole as any, orgId: member.orgId, projectIds: [] });
+      } else {
+        await setUserProjectClaims(member.userId, { ...current, role: newRole as any });
+      }
+
+      const { logOpsAction } = await import('../ops/audit-log');
+      await logOpsAction({
+        action: 'role_changed',
+        performedBy: req.user.uid,
+        targetType: 'user',
+        targetId: member.id,
+        details: { email: member.email, newRole, previousRole: current?.role || null },
+      });
+
+      res.json({ ok: true, newRole, takesEffect: 'next_login' });
+    } catch (err: any) {
+      // Firebase not configured or user not found → 404 (not 500) for the admin route
+      res.status(404).json({ error: 'not found', detail: err?.message });
+    }
+  })
+);
+
+router.post(
+  '/users/:id/reset-password',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) { res.status(404).json({ error: 'not found' }); return; }
+    const prisma = getPrismaClient();
+    const member = await prisma.organizationMember.findUnique({ where: { id: req.params.id } });
+    if (!member) { res.status(404).json({ error: 'not found' }); return; }
+
+    try {
+      const { getAuthInstance } = await import('../services/auth.service');
+      const auth = getAuthInstance();
+      const link = await auth.generatePasswordResetLink(member.email);
+
+      // Send via the local mail transport. Best-effort: never throw.
+      try {
+        const { sendEmail } = await import('../services/email.service');
+        await sendEmail({
+          to: member.email,
+          subject: 'Reset your SiteDeck password',
+          text: `Hi ${member.displayName || ''},\n\nClick the link below to set a new password:\n\n${link}\n\n— SiteDeck`,
+        });
+      } catch (mailErr: any) {
+        // mail failure is non-fatal — still return the link
+        console.warn('[admin] reset email send failed:', mailErr?.message);
+      }
+
+      const { logOpsAction } = await import('../ops/audit-log');
+      await logOpsAction({
+        action: 'password_reset_sent',
+        performedBy: req.user.uid,
+        targetType: 'user',
+        targetId: member.id,
+        details: { email: member.email },
+      });
+
+      res.json({ ok: true, sentTo: member.email });
+    } catch (err: any) {
+      res.status(404).json({ error: 'not found', detail: err?.message });
+    }
+  })
+);
+
+router.post(
+  '/users/:id/disable',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) { res.status(404).json({ error: 'not found' }); return; }
+    const prisma = getPrismaClient();
+    const member = await prisma.organizationMember.findUnique({ where: { id: req.params.id } });
+    if (!member) { res.status(404).json({ error: 'not found' }); return; }
+
+    try {
+      const { getAuthInstance } = await import('../services/auth.service');
+      const auth = getAuthInstance();
+      if (member.userId) {
+        await auth.updateUser(member.userId, { disabled: true });
+      }
+      await prisma.organizationMember.update({ where: { id: member.id }, data: { status: 'disabled' } });
+      const { logOpsAction } = await import('../ops/audit-log');
+      await logOpsAction({
+        action: 'account_disabled',
+        performedBy: req.user.uid,
+        targetType: 'user',
+        targetId: member.id,
+        details: { email: member.email },
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(404).json({ error: 'not found', detail: err?.message });
+    }
+  })
+);
+
+router.post(
+  '/users/:id/enable',
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) { res.status(404).json({ error: 'not found' }); return; }
+    const prisma = getPrismaClient();
+    const member = await prisma.organizationMember.findUnique({ where: { id: req.params.id } });
+    if (!member) { res.status(404).json({ error: 'not found' }); return; }
+
+    try {
+      const { getAuthInstance } = await import('../services/auth.service');
+      const auth = getAuthInstance();
+      if (member.userId) {
+        await auth.updateUser(member.userId, { disabled: false });
+      }
+      await prisma.organizationMember.update({ where: { id: member.id }, data: { status: 'active' } });
+      const { logOpsAction } = await import('../ops/audit-log');
+      await logOpsAction({
+        action: 'account_enabled',
+        performedBy: req.user.uid,
+        targetType: 'user',
+        targetId: member.id,
+        details: { email: member.email },
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(404).json({ error: 'not found', detail: err?.message });
+    }
   })
 );
 

@@ -5,6 +5,8 @@ import { asyncHandler } from '../lib/async-handler';
 import * as projectService from '../services/project.service';
 import * as billingService from '../services/billing.service';
 import { mapServiceErrorToApiError } from '../lib/error-handler';
+import { buildProjectCreatedEvent, emitProjectCreated } from '../services/benchmark-webhook.service';
+import { getBenchmarkActivityForProject } from '../services/benchmark-activity.service';
 
 const router = Router();
 
@@ -32,6 +34,20 @@ router.post(
     }
 
     const result = await projectService.createProject(req.body);
+    // Fire the Benchmark webhook (fire-and-forget; never blocks the
+    // response). If PM_BENCHMARK_WEBHOOK_URL is unset, this is a no-op.
+    emitProjectCreated(
+      buildProjectCreatedEvent(orgId, {
+        id: result.id,
+        name: result.name,
+        structureType: result.structureType,
+        startDate: result.startDate,
+        endDate: result.endDate,
+        city: result.city,
+        state: result.state,
+        createdAt: result.createdAt,
+      })
+    );
     res.status(201).json(result);
   })
 );
@@ -42,6 +58,16 @@ router.get(
   requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPERINTENDENT, ROLES.OWNERS_REP),
   asyncHandler(async (_req, res) => {
     const projects = await projectService.listProjects();
+    res.json(projects);
+  })
+);
+
+router.get(
+  '/map',
+  requireAuth,
+  requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPERINTENDENT, ROLES.OWNERS_REP),
+  asyncHandler(async (_req, res) => {
+    const projects = await projectService.getProjectMapData();
     res.json(projects);
   })
 );
@@ -83,6 +109,16 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await projectService.addWorkBreakdownItem(req.params.id, req.body);
     res.status(201).json(result);
+  })
+);
+
+router.get(
+  '/:id/benchmark-activity',
+  requireAuth,
+  requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER, ROLES.SUPERINTENDENT, ROLES.OWNERS_REP),
+  asyncHandler(async (req, res) => {
+    const events = await getBenchmarkActivityForProject(req.params.id);
+    res.json({ events });
   })
 );
 

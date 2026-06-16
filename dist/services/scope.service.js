@@ -10,9 +10,13 @@ exports.getChangeOrderById = getChangeOrderById;
 exports.getChangeOrdersByProject = getChangeOrdersByProject;
 exports.approveChangeOrder = approveChangeOrder;
 exports.rejectChangeOrder = rejectChangeOrder;
+exports.submitChangeOrder = submitChangeOrder;
+exports.updateChangeOrder = updateChangeOrder;
 exports.getChangeOrderPdfData = getChangeOrderPdfData;
 const prisma_1 = require("../lib/prisma");
 const client_1 = require("@prisma/client");
+const cost_service_1 = require("./cost.service");
+const integration_service_1 = require("./integration.service");
 async function createScopeStatement(projectId, content, createdBy) {
     const prisma = (0, prisma_1.getPrismaClient)();
     return prisma.scopeStatement.create({
@@ -108,7 +112,24 @@ async function approveChangeOrder(id, approver) {
     if (!co) {
         throw new Error('Change order not found');
     }
-    return prisma.changeOrder.update({
+    if (co.status === 'approved') {
+        // Idempotent: re-approving an already-approved CO is a no-op for the
+        // budget (BAC has already been adjusted). We still return the current
+        // baseline state so the caller gets a consistent response shape.
+        const baseline = await (0, cost_service_1.recalculateBaseline)(co.projectId, 0);
+        const changeOrder = await prisma.changeOrder.findUnique({ where: { id } });
+        return { changeOrder, baseline };
+    }
+    if (co.status === 'rejected') {
+        throw new Error('Cannot approve a rejected change order');
+    }
+    // Update the CO first so the dollarValue is durable, then flow it into the
+    // cost baseline. We do recalc AFTER the CO update so any concurrent read
+    // of the CO sees the new status; recalc itself is idempotent because
+    // BAC only ever grows on the first approval (re-approval short-circuits
+    // above).
+    const dollarValue = co.dollarValue ? co.dollarValue.toNumber() : 0;
+    const updated = await prisma.changeOrder.update({
         where: { id },
         data: {
             status: 'approved',
@@ -116,6 +137,22 @@ async function approveChangeOrder(id, approver) {
             approvedAt: new Date(),
         },
     });
+    const baseline = await (0, cost_service_1.recalculateBaseline)(co.projectId, dollarValue);
+    // Unified change log entry — EVM/baseline updates are part of the
+    // integrated change history so the dashboard and the Owner's Rep can
+    // see the cost progression.
+    await (0, integration_service_1.logChange)({
+        projectId: co.projectId,
+        module: 'scope',
+        changeType: 'change_order_approved',
+        description: `Change order ${co.coNumber} approved by ${approver}. ` +
+            `Baseline updated: +$${dollarValue.toLocaleString()} ` +
+            `(BAC $${baseline.previousTotalBudget.toLocaleString()} → $${baseline.newTotalBudget.toLocaleString()}).`,
+        affectedRecordId: co.id,
+        affectedRecordType: 'change_order',
+        changedBy: approver,
+    });
+    return { changeOrder: updated, baseline };
 }
 async function rejectChangeOrder(id, approver) {
     const prisma = (0, prisma_1.getPrismaClient)();
@@ -132,6 +169,35 @@ async function rejectChangeOrder(id, approver) {
             approver,
             approvedAt: new Date(),
         },
+    });
+}
+async function submitChangeOrder(id) {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    const co = await prisma.changeOrder.findUnique({ where: { id } });
+    if (!co) {
+        throw new Error('Change order not found');
+    }
+    // Submitted COs flow to the owner for approval
+    return prisma.changeOrder.update({
+        where: { id },
+        data: { status: 'submitted' },
+    });
+}
+async function updateChangeOrder(id, data) {
+    const prisma = (0, prisma_1.getPrismaClient)();
+    const updateData = {};
+    if (data.description !== undefined)
+        updateData.description = data.description;
+    if (data.dollarValue !== undefined)
+        updateData.dollarValue = new client_1.Prisma.Decimal(data.dollarValue);
+    if (data.scheduleImpact !== undefined)
+        updateData.scheduleImpact = data.scheduleImpact;
+    if (data.affectedActivityIds !== undefined) {
+        updateData.affectedActivityIds = data.affectedActivityIds;
+    }
+    return prisma.changeOrder.update({
+        where: { id },
+        data: updateData,
     });
 }
 async function getChangeOrderPdfData(id) {

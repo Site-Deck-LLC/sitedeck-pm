@@ -16,6 +16,10 @@ export interface SetupWizardInput {
   milestones?: unknown[];
   superintendentAssignments?: { userId: string; name: string }[];
   initialWbsItems?: WbsItemInput[];
+  latitude?: number;
+  longitude?: number;
+  city?: string;
+  state?: string;
 }
 
 export async function runProjectSetup(
@@ -42,6 +46,10 @@ export async function runProjectSetup(
     endDate: input.endDate,
     activeMilestones: input.milestones,
     superintendentAssignments: input.superintendentAssignments,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    city: input.city,
+    state: input.state,
   });
 
   if (input.initialWbsItems && input.initialWbsItems.length > 0) {

@@ -9,6 +9,8 @@ exports.INBOUND_EVENTS = {
     SAFETY_INCIDENT: 'safety-incident',
     FIELD_ISSUE_LOGGED: 'field-issue-logged',
     SCHEDULE_CHANGE_REQUESTED: 'schedule-change-requested',
+    ATTENDANCE_UPDATED: 'attendance-updated',
+    EQUIPMENT_STATUS_UPDATED: 'equipment-status-updated',
 };
 exports.OUTBOUND_EVENTS = {
     ACTIVITY_READY: 'activity-ready',

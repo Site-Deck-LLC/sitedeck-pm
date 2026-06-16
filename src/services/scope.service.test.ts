@@ -11,6 +11,8 @@ import {
   getChangeOrdersByProject,
   approveChangeOrder,
   rejectChangeOrder,
+  submitChangeOrder,
+  updateChangeOrder,
   getChangeOrderPdfData,
 } from './scope.service';
 
@@ -24,6 +26,11 @@ const mockChangeOrderFindUnique = jest.fn();
 const mockChangeOrderFindMany = jest.fn();
 const mockChangeOrderCount = jest.fn();
 const mockChangeOrderUpdate = jest.fn();
+const mockBudgetLineFindMany = jest.fn();
+const mockBudgetLineUpdate = jest.fn();
+const mockBudgetLineCreate = jest.fn();
+const mockUnifiedChangeLogCreate = jest.fn();
+const mockPrismaTransaction = jest.fn();
 
 const mockPrisma = {
   scopeStatement: {
@@ -39,6 +46,15 @@ const mockPrisma = {
     count: mockChangeOrderCount,
     update: mockChangeOrderUpdate,
   },
+  budgetLine: {
+    findMany: mockBudgetLineFindMany,
+    update: mockBudgetLineUpdate,
+    create: mockBudgetLineCreate,
+  },
+  unifiedChangeLog: {
+    create: mockUnifiedChangeLogCreate,
+  },
+  $transaction: mockPrismaTransaction,
 } as unknown as PrismaClient;
 
 beforeEach(() => {
@@ -251,9 +267,10 @@ describe('scope.service', () => {
     });
 
     it('approves a change order', async () => {
-      const co = { id: 'co-1', status: 'pending' };
+      const co = { id: 'co-1', coNumber: 'CO-1', projectId: 'proj-1', status: 'pending', dollarValue: null };
       mockChangeOrderFindUnique.mockResolvedValue(co);
       mockChangeOrderUpdate.mockResolvedValue({ ...co, status: 'approved', approver: 'pm-1', approvedAt: new Date() });
+      mockBudgetLineFindMany.mockResolvedValue([]);
 
       const result = await approveChangeOrder('co-1', 'pm-1');
       expect(mockChangeOrderUpdate).toHaveBeenCalledWith({
@@ -264,7 +281,10 @@ describe('scope.service', () => {
           approvedAt: expect.any(Date),
         },
       });
-      expect(result.status).toBe('approved');
+      // The approve flow now returns { changeOrder, baseline }
+      expect(result.changeOrder.status).toBe('approved');
+      expect(result.baseline).toBeDefined();
+      expect(result.baseline.addedAmount).toBe(0);
     });
 
     it('rejects a change order', async () => {
@@ -292,6 +312,32 @@ describe('scope.service', () => {
     it('throws when rejecting non-existent change order', async () => {
       mockChangeOrderFindUnique.mockResolvedValue(null);
       await expect(rejectChangeOrder('co-1', 'pm-1')).rejects.toThrow('Change order not found');
+    });
+
+    it('submits a pending change order', async () => {
+      mockChangeOrderFindUnique.mockResolvedValue({ id: 'co-1', status: 'pending' });
+      mockChangeOrderUpdate.mockResolvedValue({ id: 'co-1', status: 'submitted' });
+      const result = await submitChangeOrder('co-1');
+      expect(result.status).toBe('submitted');
+    });
+
+    it('throws when submitting non-existent change order', async () => {
+      mockChangeOrderFindUnique.mockResolvedValue(null);
+      await expect(submitChangeOrder('co-1')).rejects.toThrow('Change order not found');
+    });
+
+    it('updates a change order description and dollar value', async () => {
+      mockChangeOrderUpdate.mockResolvedValue({
+        id: 'co-1',
+        description: 'Updated',
+        dollarValue: 5000,
+      });
+      const result = await updateChangeOrder('co-1', {
+        description: 'Updated',
+        dollarValue: 5000,
+      });
+      expect(result.description).toBe('Updated');
+      expect(mockChangeOrderUpdate).toHaveBeenCalled();
     });
 
     it('returns PDF data for a change order', async () => {
@@ -362,8 +408,8 @@ describe('scope.service', () => {
       });
 
       const approveResult = await approveChangeOrder('co-1', 'pm-1');
-      expect(approveResult.status).toBe('approved');
-      expect(approveResult.affectedActivityIds).toEqual(['act-1', 'act-2']);
+      expect(approveResult.changeOrder.status).toBe('approved');
+      expect(approveResult.changeOrder.affectedActivityIds).toEqual(['act-1', 'act-2']);
     });
   });
 });

@@ -54,10 +54,10 @@ export declare function createRiskItem(data: CreateRiskItemInput): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -67,30 +67,37 @@ export declare function createRiskItem(data: CreateRiskItemInput): Promise<{
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }>;
 export declare function getRiskItemById(id: string): Promise<({
     project: {
-        id: string;
-        name: string;
-        status: string;
         orgId: string;
+        id: string;
+        status: string;
+        createdAt: Date;
+        name: string;
+        updatedAt: Date;
         structureType: string;
         structureLocked: boolean;
         startDate: Date | null;
         endDate: Date | null;
         activeMilestones: import("@prisma/client/runtime/library").JsonValue | null;
         superintendentAssignments: import("@prisma/client/runtime/library").JsonValue | null;
-        createdAt: Date;
-        updatedAt: Date;
+        contractValue: import("@prisma/client/runtime/library").Decimal | null;
+        trirTarget: number | null;
+        latitude: number | null;
+        longitude: number | null;
+        city: string | null;
+        state: string | null;
     };
 } & {
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -100,15 +107,16 @@ export declare function getRiskItemById(id: string): Promise<({
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }) | null>;
 export declare function getRiskItemsByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -118,15 +126,16 @@ export declare function getRiskItemsByProject(projectId: string): Promise<{
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }[]>;
 export declare function getOpenRisksByProject(projectId: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -136,15 +145,16 @@ export declare function getOpenRisksByProject(projectId: string): Promise<{
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }[]>;
 export declare function updateRiskItem(id: string, data: UpdateRiskItemInput): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -154,15 +164,16 @@ export declare function updateRiskItem(id: string, data: UpdateRiskItemInput): P
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }>;
 export declare function closeRiskItem(id: string, notes?: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -172,15 +183,16 @@ export declare function closeRiskItem(id: string, notes?: string): Promise<{
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }>;
 export declare function acceptRiskItem(id: string, notes?: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -190,15 +202,16 @@ export declare function acceptRiskItem(id: string, notes?: string): Promise<{
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }>;
 export declare function mitigateRiskItem(id: string, mitigationPlan: string): Promise<{
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -208,6 +221,7 @@ export declare function mitigateRiskItem(id: string, mitigationPlan: string): Pr
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }>;
 export declare function getRiskMatrix(projectId: string): Promise<RiskMatrixResult>;
 export declare function getRiskDashboardStatus(projectId: string): Promise<{
@@ -219,10 +233,10 @@ export declare function autoCreateRiskFromSafetyIncident(projectId: string, inci
     id: string;
     status: string;
     createdAt: Date;
-    updatedAt: Date;
     projectId: string;
-    description: string;
+    updatedAt: Date;
     source: string;
+    description: string;
     category: string;
     probability: string;
     impact: string;
@@ -232,5 +246,6 @@ export declare function autoCreateRiskFromSafetyIncident(projectId: string, inci
     linkedActivityId: string | null;
     linkedBudgetLineId: string | null;
     incidentReference: string | null;
+    recordable: boolean;
 }>;
 //# sourceMappingURL=risk.service.d.ts.map

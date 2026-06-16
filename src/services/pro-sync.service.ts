@@ -28,6 +28,10 @@ export interface FirestoreProjectData {
   superintendent_assignments: { userId: string; name: string }[] | null;
   org_id: string;
   updated_at: Date;
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string | null;
+  state?: string | null;
 }
 
 export async function replicateProjectToFirestore(project: Project): Promise<void> {
@@ -44,6 +48,10 @@ export async function replicateProjectToFirestore(project: Project): Promise<voi
         (project.superintendentAssignments as { userId: string; name: string }[] | null) ?? null,
       org_id: project.orgId,
       updated_at: project.updatedAt,
+      latitude: project.latitude ?? null,
+      longitude: project.longitude ?? null,
+      city: project.city ?? null,
+      state: project.state ?? null,
     };
     await db.collection('projects').doc(project.id).set(data);
   } catch (err) {

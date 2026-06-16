@@ -145,6 +145,22 @@ export async function decideChangeRequest(
     },
   });
 
+  // Notification: tell the original requester that their SCR was
+  // decided. We don't notify on 'pending' (the create path is
+  // already a notification in itself; the requester doesn't need
+  // to be told their own request is in flight).
+  if (request.requestedBy && request.requestedBy !== decidedBy) {
+    const verb = decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'modified';
+    const { createNotificationSafe } = await import('./notifications.service');
+    await createNotificationSafe({
+      userId: request.requestedBy,
+      kind: decision === 'rejected' ? 'co_rejected' : 'co_approved',
+      title: `Schedule change request ${verb}`,
+      body: notes || `Reason: ${request.reasonCode}`,
+      payload: { projectId: request.projectId, changeRequestId: request.id, decision },
+    });
+  }
+
   if (decision === 'approved' || decision === 'modified') {
     const activity = await prisma.scheduleActivity.findUnique({
       where: { id: request.activityId },

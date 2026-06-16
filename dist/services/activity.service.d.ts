@@ -28,19 +28,20 @@ export interface UpdateActivityInput {
 }
 export declare function createActivity(data: CreateActivityInput): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -52,19 +53,20 @@ export declare function createActivity(data: CreateActivityInput): Promise<{
 }>;
 export declare function getActivityById(id: string): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -76,19 +78,20 @@ export declare function getActivityById(id: string): Promise<{
 } | null>;
 export declare function getActivitiesByProject(projectId: string): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -115,23 +118,25 @@ export interface EnrichedActivity {
     wbsCategory: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
+    linkedBenchmarkDfowId: string | null;
 }
 export declare function getActivitiesWithWbs(projectId: string): Promise<EnrichedActivity[]>;
 export declare function updateActivity(id: string, data: UpdateActivityInput): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -143,19 +148,20 @@ export declare function updateActivity(id: string, data: UpdateActivityInput): P
 }>;
 export declare function deleteActivity(id: string): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -167,19 +173,20 @@ export declare function deleteActivity(id: string): Promise<{
 }>;
 export declare function markActivityReady(id: string): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -191,19 +198,20 @@ export declare function markActivityReady(id: string): Promise<{
 }>;
 export declare function markActivityComplete(id: string, _completedBy: string, completedAt: Date): Promise<{
     id: string;
-    name: string;
     status: string;
+    createdAt: Date;
+    name: string;
+    projectId: string;
+    wbsItemId: string | null;
+    percentComplete: number;
+    updatedAt: Date;
     startDate: Date;
     endDate: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    projectId: string;
     description: string | null;
-    wbsItemId: string | null;
     duration: number;
-    percentComplete: number;
     isMilestone: boolean;
     isCritical: boolean;
+    linkedBenchmarkDfowId: string | null;
     totalFloat: number | null;
     freeFloat: number | null;
     earlyStart: Date | null;
@@ -212,5 +220,69 @@ export declare function markActivityComplete(id: string, _completedBy: string, c
     lateFinish: Date | null;
     predecessors: Prisma.JsonValue | null;
     successors: Prisma.JsonValue | null;
+}>;
+export interface CreateRelationshipInput {
+    projectId: string;
+    predecessorId: string;
+    successorId: string;
+    relationshipType: 'FS' | 'SS' | 'FF' | 'SF';
+    lagDays?: number;
+    constraintType?: 'hard' | 'soft';
+}
+export declare function getRelationshipsForActivity(activityId: string): Promise<{
+    predecessors: ({
+        predecessor: {
+            id: string;
+            name: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        projectId: string;
+        updatedAt: Date;
+        predecessorId: string;
+        successorId: string;
+        relationshipType: string;
+        lagDays: number;
+        constraintType: string;
+    })[];
+    successors: ({
+        successor: {
+            id: string;
+            name: string;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        projectId: string;
+        updatedAt: Date;
+        predecessorId: string;
+        successorId: string;
+        relationshipType: string;
+        lagDays: number;
+        constraintType: string;
+    })[];
+}>;
+export declare function createRelationship(input: CreateRelationshipInput): Promise<{
+    id: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    predecessorId: string;
+    successorId: string;
+    relationshipType: string;
+    lagDays: number;
+    constraintType: string;
+}>;
+export declare function deleteRelationship(relId: string): Promise<{
+    id: string;
+    createdAt: Date;
+    projectId: string;
+    updatedAt: Date;
+    predecessorId: string;
+    successorId: string;
+    relationshipType: string;
+    lagDays: number;
+    constraintType: string;
 }>;
 //# sourceMappingURL=activity.service.d.ts.map

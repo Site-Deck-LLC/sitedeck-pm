@@ -86,6 +86,7 @@ export interface EnrichedActivity {
   wbsCategory: string | null;
   totalFloat: number | null;
   freeFloat: number | null;
+  linkedBenchmarkDfowId: string | null;
 }
 
 export async function getActivitiesWithWbs(projectId: string): Promise<EnrichedActivity[]> {
@@ -133,6 +134,7 @@ export async function getActivitiesWithWbs(projectId: string): Promise<EnrichedA
       wbsCategory: parent?.name || wbs?.name || 'Uncategorized',
       totalFloat: a.totalFloat,
       freeFloat: a.freeFloat,
+      linkedBenchmarkDfowId: a.linkedBenchmarkDfowId || null,
     };
   });
 }
@@ -217,4 +219,179 @@ export async function markActivityComplete(
   });
   await recalculateSchedule(existing.projectId);
   return activity;
+}
+
+// ─── Activity Relationships ───
+
+export interface CreateRelationshipInput {
+  projectId: string;
+  predecessorId: string;
+  successorId: string;
+  relationshipType: 'FS' | 'SS' | 'FF' | 'SF';
+  lagDays?: number;
+  constraintType?: 'hard' | 'soft';
+}
+
+export async function getRelationshipsForActivity(activityId: string) {
+  const prisma = getPrismaClient();
+  const [predecessors, successors] = await Promise.all([
+    prisma.activityRelationship.findMany({
+      where: { successorId: activityId },
+      include: { predecessor: { select: { id: true, name: true } } },
+    }),
+    prisma.activityRelationship.findMany({
+      where: { predecessorId: activityId },
+      include: { successor: { select: { id: true, name: true } } },
+    }),
+  ]);
+  return { predecessors, successors };
+}
+
+export async function createRelationship(input: CreateRelationshipInput) {
+  const prisma = getPrismaClient();
+
+  if (input.predecessorId === input.successorId) {
+    throw new Error('An activity cannot be its own predecessor or successor');
+  }
+
+  // Verify both activities exist and belong to the same project
+  const [pred, succ] = await Promise.all([
+    prisma.scheduleActivity.findUnique({ where: { id: input.predecessorId } }),
+    prisma.scheduleActivity.findUnique({ where: { id: input.successorId } }),
+  ]);
+  if (!pred || !succ) {
+    throw new Error('One or both activities not found');
+  }
+  if (pred.projectId !== input.projectId || succ.projectId !== input.projectId) {
+    throw new Error('Activities must belong to the same project');
+  }
+
+  // Check for duplicate
+  const existing = await prisma.activityRelationship.findUnique({
+    where: {
+      predecessorId_successorId_relationshipType: {
+        predecessorId: input.predecessorId,
+        successorId: input.successorId,
+        relationshipType: input.relationshipType,
+      },
+    },
+  });
+  if (existing) {
+    throw new Error('Relationship already exists');
+  }
+
+  // Circular dependency check
+  const wouldCycle = await detectCircularDependency(
+    input.projectId,
+    input.predecessorId,
+    input.successorId
+  );
+  if (wouldCycle) {
+    throw new Error('Circular dependency detected');
+  }
+
+  const rel = await prisma.activityRelationship.create({
+    data: {
+      projectId: input.projectId,
+      predecessorId: input.predecessorId,
+      successorId: input.successorId,
+      relationshipType: input.relationshipType,
+      lagDays: input.lagDays ?? 0,
+      constraintType: input.constraintType ?? 'hard',
+    },
+  });
+
+  // Sync to JSON fields for backward compatibility during transition
+  await syncRelationshipsToJson(input.projectId, input.predecessorId, input.successorId);
+
+  await recalculateSchedule(input.projectId);
+  return rel;
+}
+
+export async function deleteRelationship(relId: string) {
+  const prisma = getPrismaClient();
+  const rel = await prisma.activityRelationship.findUnique({
+    where: { id: relId },
+  });
+  if (!rel) {
+    throw new Error('Relationship not found');
+  }
+  await prisma.activityRelationship.delete({
+    where: { id: relId },
+  });
+  await syncRelationshipsToJson(rel.projectId, rel.predecessorId, rel.successorId);
+  await recalculateSchedule(rel.projectId);
+  return rel;
+}
+
+async function detectCircularDependency(
+  projectId: string,
+  newPredecessorId: string,
+  newSuccessorId: string
+): Promise<boolean> {
+  const prisma = getPrismaClient();
+  const allRels = await prisma.activityRelationship.findMany({
+    where: { projectId },
+    select: { predecessorId: true, successorId: true },
+  });
+
+  // Build adjacency list (predecessor -> successors)
+  const adj = new Map<string, string[]>();
+  for (const r of allRels) {
+    if (!adj.has(r.predecessorId)) adj.set(r.predecessorId, []);
+    adj.get(r.predecessorId)!.push(r.successorId);
+  }
+  // Add the proposed new edge
+  if (!adj.has(newPredecessorId)) adj.set(newPredecessorId, []);
+  adj.get(newPredecessorId)!.push(newSuccessorId);
+
+  // DFS to detect if newSuccessorId can reach newPredecessorId
+  const visited = new Set<string>();
+  const stack = [newSuccessorId];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node === newPredecessorId) return true;
+    if (visited.has(node)) continue;
+    visited.add(node);
+    for (const neighbor of adj.get(node) || []) {
+      stack.push(neighbor);
+    }
+  }
+  return false;
+}
+
+async function syncRelationshipsToJson(
+  projectId: string,
+  predecessorId: string,
+  successorId: string
+) {
+  const prisma = getPrismaClient();
+  const allRels = await prisma.activityRelationship.findMany({
+    where: { projectId },
+    select: { predecessorId: true, successorId: true, relationshipType: true, lagDays: true },
+  });
+
+  const predMap = new Map<string, { activityId: string; type: string; lag: number }[]>();
+  const succMap = new Map<string, { activityId: string; type: string; lag: number }[]>();
+
+  for (const r of allRels) {
+    const predEntry = { activityId: r.successorId, type: r.relationshipType, lag: r.lagDays };
+    const succEntry = { activityId: r.predecessorId, type: r.relationshipType, lag: r.lagDays };
+    if (!predMap.has(r.predecessorId)) predMap.set(r.predecessorId, []);
+    if (!succMap.has(r.successorId)) succMap.set(r.successorId, []);
+    predMap.get(r.predecessorId)!.push(predEntry);
+    succMap.get(r.successorId)!.push(succEntry);
+  }
+
+  const activityIds = [...new Set([...predMap.keys(), ...succMap.keys()])];
+  const updates = activityIds.map((id) =>
+    prisma.scheduleActivity.update({
+      where: { id },
+      data: {
+        predecessors: predMap.get(id) || [],
+        successors: succMap.get(id) || [],
+      },
+    })
+  );
+  await Promise.all(updates);
 }

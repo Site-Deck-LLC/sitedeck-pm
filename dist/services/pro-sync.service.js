@@ -33,6 +33,10 @@ async function replicateProjectToFirestore(project) {
             superintendent_assignments: project.superintendentAssignments ?? null,
             org_id: project.orgId,
             updated_at: project.updatedAt,
+            latitude: project.latitude ?? null,
+            longitude: project.longitude ?? null,
+            city: project.city ?? null,
+            state: project.state ?? null,
         };
         await db.collection('projects').doc(project.id).set(data);
     }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { getScheduleActivities, getScheduleBaselines, getScheduleRelationships } from '../api';
+import { getScheduleActivities, getScheduleBaselines, getScheduleRelationships, sendActivityToBenchmark } from '../api';
 import { SubSchedulePanel } from './SubSchedulePanel';
 import { COLORS, FONTS, SHADOWS, BORDERS } from '../styles/design-system';
 import { ScheduleImportDialog } from './ScheduleImportDialog';
@@ -22,6 +22,7 @@ interface Activity {
   wbsCategory: string | null;
   totalFloat: number | null;
   freeFloat: number | null;
+  linkedBenchmarkDfowId: string | null;
 }
 
 interface Relationship {
@@ -80,6 +81,8 @@ export function GanttView({
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [sendingBenchmarkId, setSendingBenchmarkId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -100,6 +103,28 @@ export function GanttView({
     }
     load();
   }, [projectId]);
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function handleSendToBenchmark(activityId: string, dfowId: string) {
+    setSendingBenchmarkId(activityId);
+    try {
+      await sendActivityToBenchmark(projectId, activityId, dfowId);
+      setActivities((prev) =>
+        prev.map((a) => (a.id === activityId ? { ...a, linkedBenchmarkDfowId: dfowId } : a))
+      );
+      setToast({ message: 'Linked to Benchmark', tone: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.message || 'Failed to link', tone: 'error' });
+    } finally {
+      setSendingBenchmarkId(null);
+    }
+  }
 
   return (
     <div style={pageStyle}>
@@ -202,9 +227,18 @@ export function GanttView({
             relationships={relationships}
             zoomMode={zoomMode}
             onActivityClick={setSelectedActivityId}
+            projectId={projectId}
+            sendingBenchmarkId={sendingBenchmarkId}
+            onSendToBenchmark={handleSendToBenchmark}
           />
         ) : (
-          <TableView activities={activities} onActivityClick={setSelectedActivityId} />
+          <TableView
+            activities={activities}
+            onActivityClick={setSelectedActivityId}
+            projectId={projectId}
+            sendingBenchmarkId={sendingBenchmarkId}
+            onSendToBenchmark={handleSendToBenchmark}
+          />
         )}
       </div>
 
@@ -243,6 +277,36 @@ export function GanttView({
         onNavigate={(id) => setSelectedActivityId(id)}
       />
       <SubSchedulePanel projectId={projectId} />
+
+      {/* Toast */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          onClick={() => setToast(null)}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 9999,
+            maxWidth: 380,
+            padding: '12px 16px',
+            background: toast.tone === 'error' ? COLORS.red : COLORS.green,
+            color: COLORS.white,
+            borderRadius: BORDERS.radius.md,
+            boxShadow: SHADOWS.lg,
+            fontSize: FONTS.size.sm,
+            fontWeight: FONTS.weight.medium,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>●</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,12 +319,18 @@ function GanttChart({
   relationships,
   zoomMode,
   onActivityClick,
+  projectId,
+  sendingBenchmarkId,
+  onSendToBenchmark,
 }: {
   activities: Activity[];
   baselines: Baseline[];
   relationships: Relationship[];
   zoomMode: ZoomMode;
   onActivityClick: (id: string) => void;
+  projectId: string;
+  sendingBenchmarkId: string | null;
+  onSendToBenchmark: (activityId: string, dfowId: string) => Promise<void>;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -545,6 +615,12 @@ function GanttChart({
                       <div style={{ fontSize: FONTS.size.xs, color: COLORS.textMuted, marginTop: 2 }}>
                         {act.startDate.slice(0, 10)} → {act.endDate.slice(0, 10)} · {act.duration}d
                       </div>
+                      <BenchmarkLinkRow
+                        activity={act}
+                        projectId={projectId}
+                        sendingId={sendingBenchmarkId}
+                        onSend={onSendToBenchmark}
+                      />
                     </div>
 
                     {/* Timeline column */}
@@ -760,7 +836,19 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 
 // ── Table View ──
 
-function TableView({ activities, onActivityClick }: { activities: Activity[]; onActivityClick: (id: string) => void }) {
+function TableView({
+  activities,
+  onActivityClick,
+  projectId,
+  sendingBenchmarkId,
+  onSendToBenchmark,
+}: {
+  activities: Activity[];
+  onActivityClick: (id: string) => void;
+  projectId: string;
+  sendingBenchmarkId: string | null;
+  onSendToBenchmark: (activityId: string, dfowId: string) => Promise<void>;
+}) {
   return (
     <div style={tableCardStyle}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: FONTS.size.sm }}>
@@ -775,6 +863,7 @@ function TableView({ activities, onActivityClick }: { activities: Activity[]; on
             <th style={thStyle}>Status</th>
             <th style={thStyle}>Float</th>
             <th style={thStyle}>Critical</th>
+            <th style={thStyle}>Benchmark</th>
           </tr>
         </thead>
         <tbody>
@@ -805,11 +894,142 @@ function TableView({ activities, onActivityClick }: { activities: Activity[]; on
               <td style={tdStyle}><StatusBadge status={act.status} /></td>
               <td style={tdStyle}><span style={{ color: COLORS.textSecondary }}>{act.totalFloat != null ? `${act.totalFloat.toFixed(1)}d` : '—'}</span></td>
               <td style={tdStyle}>{act.isCritical ? <span style={{ color: COLORS.red, fontWeight: FONTS.weight.semibold }}>Yes</span> : <span style={{ color: COLORS.textMuted }}>No</span>}</td>
+              <td style={tdStyle}>
+                <BenchmarkLinkRow activity={act} projectId={projectId} sendingId={sendingBenchmarkId} onSend={onSendToBenchmark} />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function BenchmarkLinkRow({
+  activity,
+  sendingId,
+  onSend,
+}: {
+  activity: Activity;
+  projectId: string;
+  sendingId: string | null;
+  onSend: (activityId: string, dfowId: string) => Promise<void>;
+}) {
+  const [dfowInput, setDfowInput] = useState('');
+  const [showInput, setShowInput] = useState(false);
+
+  if (activity.linkedBenchmarkDfowId) {
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          marginTop: 4,
+          padding: '2px 8px',
+          borderRadius: 4,
+          background: 'rgba(34,160,107,0.1)',
+          color: '#22A06B',
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.3px',
+          textTransform: 'uppercase',
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+        Linked to Benchmark
+      </span>
+    );
+  }
+
+  if (showInput) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+        <input
+          value={dfowInput}
+          onChange={(e) => setDfowInput(e.target.value)}
+          placeholder="DFOW ID"
+          style={{
+            width: 100,
+            padding: '3px 6px',
+            borderRadius: 4,
+            border: `1px solid ${COLORS.gray200}`,
+            fontSize: 11,
+            outline: 'none',
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && dfowInput.trim()) {
+              onSend(activity.id, dfowInput.trim());
+              setShowInput(false);
+              setDfowInput('');
+            }
+            if (e.key === 'Escape') {
+              setShowInput(false);
+              setDfowInput('');
+            }
+          }}
+          autoFocus
+        />
+        <button
+          disabled={!dfowInput.trim() || sendingId === activity.id}
+          onClick={() => {
+            onSend(activity.id, dfowInput.trim());
+            setShowInput(false);
+            setDfowInput('');
+          }}
+          style={{
+            padding: '3px 8px',
+            borderRadius: 4,
+            border: 'none',
+            background: COLORS.orange,
+            color: COLORS.white,
+            fontSize: 10,
+            fontWeight: 600,
+            cursor: 'pointer',
+            opacity: !dfowInput.trim() || sendingId === activity.id ? 0.6 : 1,
+          }}
+        >
+          {sendingId === activity.id ? 'Sending…' : 'Send'}
+        </button>
+        <button
+          onClick={() => { setShowInput(false); setDfowInput(''); }}
+          style={{
+            padding: '3px 8px',
+            borderRadius: 4,
+            border: `1px solid ${COLORS.gray200}`,
+            background: COLORS.white,
+            color: COLORS.textSecondary,
+            fontSize: 10,
+            cursor: 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setShowInput(true)}
+      style={{
+        marginTop: 4,
+        padding: '2px 8px',
+        borderRadius: 4,
+        border: `1px solid ${COLORS.orange}`,
+        background: 'transparent',
+        color: COLORS.orange,
+        fontSize: 10,
+        fontWeight: 600,
+        cursor: 'pointer',
+        letterSpacing: '0.3px',
+        textTransform: 'uppercase',
+      }}
+    >
+      Send to Benchmark
+    </button>
   );
 }
 

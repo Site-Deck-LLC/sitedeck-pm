@@ -329,6 +329,7 @@ export async function autoCreateRiskFromSafetyIncident(
       owner: 'safety_system',
       source: RISK_SOURCES.SAFETY_INCIDENT_WEBHOOK,
       incidentReference,
+      recordable: incidentData.recordable,
     },
   });
 }

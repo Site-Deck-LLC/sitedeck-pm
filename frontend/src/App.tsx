@@ -33,6 +33,7 @@ const BillingSettings = lazy(() =>
 const Drawings = lazy(() => import('./components/Drawings').then((m) => ({ default: m.Drawings })));
 const Portfolio = lazy(() => import('./components/Portfolio').then((m) => ({ default: m.Portfolio })));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
+const Settings = lazy(() => import('./components/Settings').then((m) => ({ default: m.Settings })));
 
 type View =
   | 'projects'
@@ -46,7 +47,8 @@ type View =
   | 'billing'
   | 'drawings'
   | 'portfolio'
-  | 'admin';
+  | 'admin'
+  | 'settings';
 
 interface AppState {
   view: View;
@@ -219,6 +221,14 @@ export default function App() {
     return (
       <Suspense fallback={<RouteLoading label="Loading admin…" />}>
         <AdminDashboard onBack={() => push({ view: 'projects', projectId: null, tileKey: null })} />
+      </Suspense>
+    );
+  }
+
+  if (view === 'settings') {
+    return (
+      <Suspense fallback={<RouteLoading label="Loading settings…" />}>
+        <Settings onBack={() => push({ view: 'projects', projectId: null, tileKey: null })} />
       </Suspense>
     );
   }

@@ -12,6 +12,10 @@ export interface SetupWizardInput {
         name: string;
     }[];
     initialWbsItems?: WbsItemInput[];
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+    state?: string;
 }
 export declare function runProjectSetup(input: SetupWizardInput): Promise<Project & {
     workBreakdownItems: WorkBreakdownItem[];

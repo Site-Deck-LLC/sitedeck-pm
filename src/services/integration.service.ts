@@ -106,7 +106,7 @@ export async function createIssue(data: CreateIssueInput) {
   const prisma = getPrismaClient();
   const issueNumber = await generateIssueNumber(data.projectId);
 
-  return prisma.issue.create({
+  const created = await prisma.issue.create({
     data: {
       projectId: data.projectId,
       issueNumber,
@@ -122,6 +122,20 @@ export async function createIssue(data: CreateIssueInput) {
       createdBy: data.createdBy,
     },
   });
+  // Notification: when an issue is created with an assignee, that
+  // person gets a bell. We only fire on initial create — re-assigns
+  // use updateIssue below.
+  if (created.assignee && created.assignee !== data.createdBy) {
+    const { createNotificationSafe } = await import('./notifications.service');
+    await createNotificationSafe({
+      userId: created.assignee,
+      kind: 'issue_assigned',
+      title: `Issue ${created.issueNumber} assigned to you`,
+      body: created.title,
+      payload: { projectId: created.projectId, issueId: created.id, issueNumber: created.issueNumber },
+    });
+  }
+  return created;
 }
 
 export async function getIssueById(id: string) {
@@ -157,7 +171,7 @@ export async function updateIssue(id: string, data: UpdateIssueInput) {
     throw new Error('Issue not found');
   }
 
-  return prisma.issue.update({
+  const updated = await prisma.issue.update({
     where: { id },
     data: {
       type: data.type,
@@ -170,6 +184,24 @@ export async function updateIssue(id: string, data: UpdateIssueInput) {
       dueDate: data.dueDate,
     },
   });
+  // Notification: when an issue is re-assigned to a new person,
+  // notify them. We only fire when the assignee actually changed
+  // and is non-empty.
+  if (
+    data.assignee !== undefined &&
+    data.assignee &&
+    data.assignee !== existing.assignee
+  ) {
+    const { createNotificationSafe } = await import('./notifications.service');
+    await createNotificationSafe({
+      userId: data.assignee,
+      kind: 'issue_assigned',
+      title: `Issue ${updated.issueNumber} assigned to you`,
+      body: updated.title,
+      payload: { projectId: updated.projectId, issueId: updated.id, issueNumber: updated.issueNumber },
+    });
+  }
+  return updated;
 }
 
 export async function resolveIssue(id: string, resolvedBy: string) {
@@ -187,6 +219,36 @@ export async function resolveIssue(id: string, resolvedBy: string) {
       status: ISSUE_STATUSES.RESOLVED,
       resolvedAt: new Date(),
     },
+  });
+}
+
+export interface AppendIssueNoteInput {
+  issueId: string;
+  text: string;
+  author: string;
+}
+
+export async function appendIssueNote(input: AppendIssueNoteInput) {
+  const prisma = getPrismaClient();
+  const existing = await prisma.issue.findUnique({ where: { id: input.issueId } });
+  if (!existing) {
+    throw new Error('Issue not found');
+  }
+
+  const prior = (existing.notes as any) || [];
+  const next = [
+    ...prior,
+    {
+      id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: input.text,
+      author: input.author,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+
+  return prisma.issue.update({
+    where: { id: input.issueId },
+    data: { notes: next as Prisma.InputJsonValue },
   });
 }
 
@@ -236,6 +298,45 @@ export async function getIssuePdfData(id: string) {
 }
 
 // Voice-to-Issue
+
+export interface VoiceToIssueInput {
+  projectId: string;
+  audioBlob?: Buffer;
+  audioUrl?: string;
+  durationSeconds?: number;
+  createdBy: string;
+}
+
+export interface VoiceToIssueResult {
+  status: 'pending' | 'unsupported';
+  memoId?: string;
+  message: string;
+}
+
+/**
+ * Stub for voice-to-issue flow. Persists a voice memo with status 'pending'
+ * so the iOS / web client can hand off audio for background transcription.
+ * The actual STT + LLM extraction lives in a later sprint — for V1 the UI
+ * just shows "Voice logging coming soon" and records the attempt.
+ */
+export async function voiceToIssue(input: VoiceToIssueInput): Promise<VoiceToIssueResult> {
+  const prisma = getPrismaClient();
+  const memo = await prisma.voiceMemo.create({
+    data: {
+      projectId: input.projectId,
+      audioUrl: input.audioUrl || '',
+      transcription: '',
+      structuredData: Prisma.JsonNull,
+      status: VOICE_MEMO_STATUSES.PENDING,
+      createdBy: input.createdBy,
+    },
+  });
+  return {
+    status: 'pending',
+    memoId: memo.id,
+    message: 'Voice memo recorded. Transcription will be processed in a future release.',
+  };
+}
 
 export async function createVoiceMemo(data: CreateVoiceMemoInput) {
   const prisma = getPrismaClient();

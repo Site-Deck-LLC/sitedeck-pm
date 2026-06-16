@@ -13,6 +13,7 @@ import {
   processVoiceMemo,
   getVoiceMemosByProject,
   getVoiceMemoById,
+  voiceToIssue,
   createSelfMemo,
   getSelfMemosByUser,
   logChange,
@@ -24,6 +25,7 @@ import {
   completeChecklistItem,
   getCloseoutProgress,
   DEFAULT_CLOSEOUT_ITEMS,
+  appendIssueNote,
 } from './integration.service';
 
 const mockIssueCreate = jest.fn();
@@ -374,6 +376,30 @@ describe('integration.service', () => {
     });
   });
 
+  describe('voiceToIssue', () => {
+    it('records the voice memo and returns a pending status with the memoId', async () => {
+      mockVoiceMemoCreate.mockResolvedValue({ id: 'memo-stub-1' });
+      const result = await voiceToIssue({
+        projectId: 'proj-1',
+        audioUrl: 'https://storage/voice.m4a',
+        durationSeconds: 12,
+        createdBy: 'user-1',
+      });
+      expect(mockVoiceMemoCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            projectId: 'proj-1',
+            status: 'pending',
+            createdBy: 'user-1',
+          }),
+        })
+      );
+      expect(result.status).toBe('pending');
+      expect(result.memoId).toBe('memo-stub-1');
+      expect(result.message).toMatch(/future release/i);
+    });
+  });
+
   describe('getVoiceMemosByProject', () => {
     it('returns voice memos ordered by createdAt desc', async () => {
       const memos = [{ id: 'memo-1' }];
@@ -639,6 +665,46 @@ describe('integration.service', () => {
       expect(result.completed).toBe(0);
       expect(result.percentComplete).toBe(0);
       expect(result.status).toBe('in_progress');
+    });
+  });
+
+  describe('appendIssueNote', () => {
+    it('appends a new note to an existing issue with empty notes', async () => {
+      mockIssueFindUnique.mockResolvedValue({ id: 'iss-1', notes: null });
+      mockIssueUpdate.mockResolvedValue({ id: 'iss-1', notes: [{ id: 'note-x', text: 'hello', author: 'u1' }] });
+
+      await appendIssueNote({ issueId: 'iss-1', text: 'hello', author: 'u1' });
+
+      expect(mockIssueUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'iss-1' },
+          data: expect.objectContaining({
+            notes: expect.arrayContaining([expect.objectContaining({ text: 'hello', author: 'u1' })]),
+          }),
+        })
+      );
+    });
+
+    it('appends a new note to existing notes (preserves order)', async () => {
+      const existing = [
+        { id: 'note-1', text: 'first', author: 'u1', createdAt: '2026-06-01T00:00:00.000Z' },
+        { id: 'note-2', text: 'second', author: 'u2', createdAt: '2026-06-02T00:00:00.000Z' },
+      ];
+      mockIssueFindUnique.mockResolvedValue({ id: 'iss-1', notes: existing });
+      mockIssueUpdate.mockResolvedValue({ id: 'iss-1', notes: [...existing, { id: 'note-3', text: 'third', author: 'u3' }] });
+
+      await appendIssueNote({ issueId: 'iss-1', text: 'third', author: 'u3' });
+
+      const call = mockIssueUpdate.mock.calls[0][0];
+      const notes = call.data.notes as any[];
+      expect(notes).toHaveLength(3);
+      expect(notes[0].text).toBe('first');
+      expect(notes[2].text).toBe('third');
+    });
+
+    it('throws when the issue does not exist', async () => {
+      mockIssueFindUnique.mockResolvedValue(null);
+      await expect(appendIssueNote({ issueId: 'nonexistent', text: 'x', author: 'u1' })).rejects.toThrow('Issue not found');
     });
   });
 });

@@ -9,8 +9,8 @@ const router = Router();
  * endpoint must never throw — it's used by load balancers, Uptime
  * checks, and the sidebar status dots).
  *
- * - benchmark: PM_BENCHMARK_WEBHOOK_URL set AND we have at least one
- *   recorded 2xx outbound to Benchmark in the webhook log.
+ * - benchmark: last inbound benchmark webhook within 7 days OR last
+ *   successful outbound to Benchmark within 24h.
  * - pro: We have received a Pro inbound webhook within the last 7 days.
  * - design: always false (not built).
  */
@@ -22,21 +22,32 @@ async function getConnectedProducts(): Promise<{
   const result = { benchmark: false, pro: false, design: false };
   try {
     const prisma = getPrismaClient();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // Benchmark: URL set AND a recorded 2xx outbound
-    if (process.env.PM_BENCHMARK_WEBHOOK_URL) {
-      const lastBenchmark = await prisma.webhooksLog.findFirst({
-        where: {
-          event: { contains: 'benchmark' },
-          status: { gte: '200', lt: '300' },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      result.benchmark = Boolean(lastBenchmark);
-    }
+    // Inbound benchmark webhook within last 7 days
+    const lastInbound = await prisma.webhooksLog.findFirst({
+      where: {
+        direction: 'inbound',
+        event: { contains: 'benchmark' },
+        createdAt: { gte: sevenDaysAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Outbound 2xx to Benchmark within last 24h
+    const lastOutbound = await prisma.webhooksLog.findFirst({
+      where: {
+        event: { contains: 'benchmark' },
+        status: { gte: '200', lt: '300' },
+        createdAt: { gte: twentyFourHoursAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    result.benchmark = Boolean(lastInbound) || Boolean(lastOutbound);
 
     // Pro: inbound webhook within last 7 days
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const lastPro = await prisma.webhooksLog.findFirst({
       where: {
         direction: 'inbound',
