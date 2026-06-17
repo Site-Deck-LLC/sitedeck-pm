@@ -15,6 +15,7 @@
  */
 
 import { getPrismaClient } from '../lib/prisma';
+import { getPreferences, shouldDeliver } from './notification-preferences.service';
 
 let firebaseAdmin: any = null;
 function getFirebaseAdmin() {
@@ -83,6 +84,7 @@ export interface SendPushInput {
   body?: string;
   data?: Record<string, string>;
   actionUrl?: string;
+  kind?: import('./notifications.service').NotificationKind;
 }
 
 export interface SendPushResult {
@@ -99,6 +101,17 @@ export interface SendPushResult {
  */
 export async function sendPushNotification(input: SendPushInput): Promise<SendPushResult> {
   const result: SendPushResult = { attempted: 0, sent: 0, failed: 0, staleTokensRemoved: 0, noTokens: true };
+
+  // Sprint 14: respect notification preferences before sending push
+  try {
+    const prefs = await getPreferences(input.userId);
+    const kind = input.kind || 'system';
+    if (!shouldDeliver(prefs, kind, 'push')) {
+      return result;
+    }
+  } catch {
+    // If preferences lookup fails, continue with best-effort send
+  }
 
   let tokens: { id: string; token: string; platform: string }[] = [];
   try {

@@ -40,6 +40,7 @@ import bugApprovalRouter from './bug-approval.routes';
 import { quickbooksRouter, quickbooksProjectRouter } from './quickbooks.routes';
 import subSchedulesRouter from './sub-schedules.routes';
 import benchmarkWebhookRouter from './benchmark-webhook.routes';
+import proWebhookRouter from './pro-webhook.routes';
 import reworkTaskRouter from './rework-task.routes';
 
 const router = Router();
@@ -67,6 +68,7 @@ router.use('/projects/:projectId/documents', documentsRouter);
 router.use('/billing', billingRouter);
 router.use('/webhooks/stripe', stripeWebhookRouter);
 router.use('/webhooks/benchmark', benchmarkWebhookRouter);
+router.use('/webhooks/pro', proWebhookRouter);
 router.use('/webhooks', webhookRouter);
 router.use('/templates', templatesRouter);
 router.use('/portfolio', portfolioRouter);

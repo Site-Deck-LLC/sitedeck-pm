@@ -242,6 +242,37 @@ describe('benchmark-webhook.routes', () => {
     expect(res.body.action).toBe('logged');
   });
 
+  it('creates ReworkTask on benchmark.rework.required', async () => {
+    mockWebhooksLogFindFirst.mockResolvedValue(null);
+    mockWebhooksLogCreate.mockResolvedValue({ id: 'log-1' });
+    mockReworkTaskCreate.mockResolvedValue({ id: 'rt-rework-1' });
+
+    const res = await request(app).post('/api/v1/webhooks/benchmark').send({
+      event: 'benchmark.rework.required',
+      projectId: 'proj-1',
+      eventId: 'evt-rework-1',
+      ncrId: 'ncr-1',
+      ncrNumber: 'NCR-2026-007',
+      dfowId: 'dfow-1',
+      unitReference: 'BAT-001',
+      description: 'Concrete crack exceeded tolerance',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.action).toBe('rework_task_created');
+    expect(mockReworkTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          projectId: 'proj-1',
+          ncrId: 'ncr-1',
+          dfowId: 'dfow-1',
+          source: 'ncr',
+          priority: 'high',
+        }),
+      })
+    );
+  });
+
   it('is idempotent by eventId', async () => {
     mockWebhooksLogFindFirst.mockResolvedValue({ id: 'log-prev' });
 

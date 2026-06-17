@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { getScheduleActivities, getScheduleBaselines, getScheduleRelationships, sendActivityToBenchmark } from '../api';
+import { getScheduleActivities, getScheduleBaselines, getScheduleRelationships, sendActivityToBenchmark, assignActivityToField } from '../api';
 import { SubSchedulePanel } from './SubSchedulePanel';
 import { COLORS, FONTS, SHADOWS, BORDERS } from '../styles/design-system';
 import { ScheduleImportDialog } from './ScheduleImportDialog';
@@ -82,6 +82,7 @@ export function GanttView({
   const [showImport, setShowImport] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [sendingBenchmarkId, setSendingBenchmarkId] = useState<string | null>(null);
+  const [assigningFieldId, setAssigningFieldId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,18 @@ export function GanttView({
       setToast({ message: err.message || 'Failed to link', tone: 'error' });
     } finally {
       setSendingBenchmarkId(null);
+    }
+  }
+
+  async function handleAssignToField(activityId: string, activityName: string) {
+    setAssigningFieldId(activityId);
+    try {
+      await assignActivityToField(projectId, activityId, activityName, 'Complete work assigned');
+      setToast({ message: 'Assigned to field crew', tone: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.message || 'Failed to assign', tone: 'error' });
+    } finally {
+      setAssigningFieldId(null);
     }
   }
 
@@ -230,6 +243,8 @@ export function GanttView({
             projectId={projectId}
             sendingBenchmarkId={sendingBenchmarkId}
             onSendToBenchmark={handleSendToBenchmark}
+            assigningFieldId={assigningFieldId}
+            onAssignToField={handleAssignToField}
           />
         ) : (
           <TableView
@@ -238,6 +253,8 @@ export function GanttView({
             projectId={projectId}
             sendingBenchmarkId={sendingBenchmarkId}
             onSendToBenchmark={handleSendToBenchmark}
+            assigningFieldId={assigningFieldId}
+            onAssignToField={handleAssignToField}
           />
         )}
       </div>
@@ -322,6 +339,8 @@ function GanttChart({
   projectId,
   sendingBenchmarkId,
   onSendToBenchmark,
+  assigningFieldId,
+  onAssignToField,
 }: {
   activities: Activity[];
   baselines: Baseline[];
@@ -331,6 +350,8 @@ function GanttChart({
   projectId: string;
   sendingBenchmarkId: string | null;
   onSendToBenchmark: (activityId: string, dfowId: string) => Promise<void>;
+  assigningFieldId: string | null;
+  onAssignToField: (activityId: string, activityName: string) => Promise<void>;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -620,6 +641,8 @@ function GanttChart({
                         projectId={projectId}
                         sendingId={sendingBenchmarkId}
                         onSend={onSendToBenchmark}
+                        assigningId={assigningFieldId}
+                        onAssign={onAssignToField}
                       />
                     </div>
 
@@ -842,12 +865,16 @@ function TableView({
   projectId,
   sendingBenchmarkId,
   onSendToBenchmark,
+  assigningFieldId,
+  onAssignToField,
 }: {
   activities: Activity[];
   onActivityClick: (id: string) => void;
   projectId: string;
   sendingBenchmarkId: string | null;
   onSendToBenchmark: (activityId: string, dfowId: string) => Promise<void>;
+  assigningFieldId: string | null;
+  onAssignToField: (activityId: string, activityName: string) => Promise<void>;
 }) {
   return (
     <div style={tableCardStyle}>
@@ -895,7 +922,7 @@ function TableView({
               <td style={tdStyle}><span style={{ color: COLORS.textSecondary }}>{act.totalFloat != null ? `${act.totalFloat.toFixed(1)}d` : '—'}</span></td>
               <td style={tdStyle}>{act.isCritical ? <span style={{ color: COLORS.red, fontWeight: FONTS.weight.semibold }}>Yes</span> : <span style={{ color: COLORS.textMuted }}>No</span>}</td>
               <td style={tdStyle}>
-                <BenchmarkLinkRow activity={act} projectId={projectId} sendingId={sendingBenchmarkId} onSend={onSendToBenchmark} />
+                <BenchmarkLinkRow activity={act} projectId={projectId} sendingId={sendingBenchmarkId} onSend={onSendToBenchmark} assigningId={assigningFieldId} onAssign={onAssignToField} />
               </td>
             </tr>
           ))}
@@ -909,11 +936,15 @@ function BenchmarkLinkRow({
   activity,
   sendingId,
   onSend,
+  assigningId,
+  onAssign,
 }: {
   activity: Activity;
   projectId: string;
   sendingId: string | null;
   onSend: (activityId: string, dfowId: string) => Promise<void>;
+  assigningId: string | null;
+  onAssign: (activityId: string, activityName: string) => Promise<void>;
 }) {
   const [dfowInput, setDfowInput] = useState('');
   const [showInput, setShowInput] = useState(false);
@@ -1012,24 +1043,48 @@ function BenchmarkLinkRow({
   }
 
   return (
-    <button
-      onClick={() => setShowInput(true)}
-      style={{
-        marginTop: 4,
-        padding: '2px 8px',
-        borderRadius: 4,
-        border: `1px solid ${COLORS.orange}`,
-        background: 'transparent',
-        color: COLORS.orange,
-        fontSize: 10,
-        fontWeight: 600,
-        cursor: 'pointer',
-        letterSpacing: '0.3px',
-        textTransform: 'uppercase',
-      }}
-    >
-      Send to Benchmark
-    </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <button
+        onClick={() => setShowInput(true)}
+        style={{
+          marginTop: 4,
+          padding: '2px 8px',
+          borderRadius: 4,
+          border: `1px solid ${COLORS.orange}`,
+          background: 'transparent',
+          color: COLORS.orange,
+          fontSize: 10,
+          fontWeight: 600,
+          cursor: 'pointer',
+          letterSpacing: '0.3px',
+          textTransform: 'uppercase',
+        }}
+      >
+        Send to Benchmark
+      </button>
+      {(activity.status === 'complete' || activity.status === 'in_progress') && (
+        <button
+          disabled={assigningId === activity.id}
+          onClick={() => onAssign(activity.id, activity.name)}
+          style={{
+            marginTop: 4,
+            padding: '2px 8px',
+            borderRadius: 4,
+            border: `1px solid ${COLORS.navy}`,
+            background: 'transparent',
+            color: COLORS.navy,
+            fontSize: 10,
+            fontWeight: 600,
+            cursor: 'pointer',
+            letterSpacing: '0.3px',
+            textTransform: 'uppercase',
+            opacity: assigningId === activity.id ? 0.6 : 1,
+          }}
+        >
+          {assigningId === activity.id ? 'Assigning…' : 'Assign to Field'}
+        </button>
+      )}
+    </div>
   );
 }
 

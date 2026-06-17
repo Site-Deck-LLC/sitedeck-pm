@@ -83,6 +83,25 @@ router.post(
   })
 );
 
+router.post(
+  '/activities/:activityId/assign-to-field',
+  requireAuth,
+  requireRole(ROLES.OWNER_ADMIN, ROLES.PROJECT_MANAGER),
+  asyncHandler(async (req, res) => {
+    const { projectId } = req.params;
+    const { activityId } = req.params;
+    const { taskDescription } = req.body || {};
+    const { assignToField } = await import('../services/pro-outbound.service');
+    const result = await assignToField({
+      projectId,
+      activityId,
+      activityName: req.body?.activityName || '',
+      taskDescription: taskDescription || '',
+    });
+    res.json({ success: result.sent, taskId: result.taskId });
+  })
+);
+
 router.get(
   '/baselines',
   requireAuth,

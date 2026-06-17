@@ -172,7 +172,31 @@ Traefik config: `scripts/traefik-ops.yml` — must be copied to `/var/www/ground
 ## Known Users
 | Name | Email | Firebase UID | PM Role | Status |
 |---|---|---|---|---|
-| Jose Vasquez | vasquezj@orionfsl.com | YUcAjSkVx6aCvzxBpG9NzIciVFG2 | project_manager | ✅ Provisioned in Benchmark (Sprint 16) |
+| Jose Vasquez | vasquezj@orionfsl.com | YUcAjSkVx6aCvzxBpG9NzIciVFG2 | project_manager | ✅ Provisioned in PM + Benchmark (Sprint 16) |
+
+---
+
+## Willow Creek Real Data Seeded (Sprint 16 — 2026-06-17)
+**Project ID:** `willow-creek`  
+**Contractor:** Orion Fiber Solutions LLC  
+**Client:** Ryan Company, 15 Commerce Way, Norton MA 02766  
+
+**Database:** PM `sitedeck_pm_dev` (VPS Postgres via tunnel)
+
+| Entity | Count | Key IDs |
+|---|---|---|
+| Project | 1 | `willow-creek` |
+| Organization | 1 | `orion-fiber-solutions` |
+| ScheduleActivity | 10 | 10 labor activities with FJB unit refs |
+| BudgetLine | 17 | 2 summaries + 15 material items from Quote 0138 |
+| OrgMember | 1 | Jose Vasquez (`YUcAjSkVx6aCvzxBpG9NzIciVFG2`) |
+| ProjectMember | 1 | Jose Vasquez on `willow-creek` |
+
+**Scripts:**
+- PM: `src/scripts/seed-willow-pm.ts`
+- Benchmark: `src/scripts/seed-willow-benchmark.ts`
+
+**Note:** Do not re-run scripts on production without checking for existing records first — they are idempotent for some entities (project, org) but not for activities/budget lines (duplicates will occur on re-run unless records are cleared).
 
 ---
 

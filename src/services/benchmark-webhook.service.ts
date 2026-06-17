@@ -140,7 +140,7 @@ async function sendWithRetry(url: string, event: BenchmarkProjectCreatedEvent): 
   throw lastErr || new Error('benchmark webhook failed');
 }
 
-function signHmac(secret: string, body: string): string {
+export function signHmac(secret: string, body: string): string {
   return 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
 }
 
@@ -151,4 +151,91 @@ function toIso(d: Date | string | null | undefined): string | null {
   const parsed = new Date(d);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
+}
+
+/* ------------------------------------------------------------------
+ * Sprint 14: additional outbound event builders
+ * ------------------------------------------------------------------ */
+
+export interface ActivityReadyForInspectionEvent {
+  event: 'pm.activity.ready_for_inspection';
+  projectId: string;
+  activityId: string;
+  activityName: string;
+  emittedAt: string;
+}
+
+export function buildActivityReadyForInspectionEvent(
+  projectId: string,
+  activityId: string,
+  activityName: string
+): ActivityReadyForInspectionEvent {
+  return {
+    event: 'pm.activity.ready_for_inspection',
+    projectId,
+    activityId,
+    activityName,
+    emittedAt: new Date().toISOString(),
+  };
+}
+
+export function emitActivityReadyForInspection(event: ActivityReadyForInspectionEvent): void {
+  const url = process.env.PM_BENCHMARK_WEBHOOK_URL;
+  if (!url) return;
+  setImmediate(() => {
+    sendEvent(url, event).catch((err) => {
+      console.warn('[benchmark-webhook] emitActivityReadyForInspection failed:', err?.message || err);
+    });
+  });
+}
+
+export interface ReworkCompleteEvent {
+  event: 'pm.rework.complete';
+  projectId: string;
+  dfowId: string | null;
+  unitReference: string | null;
+  reworkTaskId: string | null;
+  emittedAt: string;
+}
+
+export function buildReworkCompleteEvent(
+  projectId: string,
+  dfowId: string | null,
+  unitReference: string | null,
+  reworkTaskId: string | null
+): ReworkCompleteEvent {
+  return {
+    event: 'pm.rework.complete',
+    projectId,
+    dfowId,
+    unitReference,
+    reworkTaskId,
+    emittedAt: new Date().toISOString(),
+  };
+}
+
+export function emitReworkComplete(event: ReworkCompleteEvent): void {
+  const url = process.env.PM_BENCHMARK_WEBHOOK_URL;
+  if (!url) return;
+  setImmediate(() => {
+    sendEvent(url, event).catch((err) => {
+      console.warn('[benchmark-webhook] emitReworkComplete failed:', err?.message || err);
+    });
+  });
+}
+
+async function sendEvent(url: string, event: any): Promise<void> {
+  const body = JSON.stringify(event);
+  const secret = process.env.PM_BENCHMARK_WEBHOOK_SECRET;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-PM-Event': event.event,
+  };
+  if (secret) {
+    const sig = signHmac(secret, body);
+    headers['x-sitedeck-signature'] = sig;
+    headers['X-PM-Signature'] = sig;
+  }
+  const res = await fetch(url, { method: 'POST', headers, body });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from benchmark webhook`);
 }

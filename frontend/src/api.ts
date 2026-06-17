@@ -650,3 +650,19 @@ export function getBenchmarkActivity(projectId: string) {
     `/api/v1/projects/${projectId}/benchmark-activity`
   );
 }
+
+// ── Pro Integration ──
+export function assignActivityToField(
+  projectId: string,
+  activityId: string,
+  activityName: string,
+  taskDescription: string
+) {
+  return fetchApi<{ success: boolean; taskId?: string }>(
+    `/api/v1/projects/${projectId}/schedule/activities/${activityId}/assign-to-field`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ activityName, taskDescription }),
+    }
+  );
+}

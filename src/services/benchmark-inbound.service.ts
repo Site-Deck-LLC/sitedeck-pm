@@ -44,6 +44,7 @@ const BENCHMARK_EVENTS = {
   HOLD_POINT_RELEASED: 'benchmark.hold_point.released',
   DAILY_REPORT_POSTED: 'benchmark.daily_report.posted',
   QCP_EXPORTED: 'benchmark.qcp.exported',
+  REWORK_REQUIRED: 'benchmark.rework.required',
 } as const;
 
 /**
@@ -167,6 +168,8 @@ export async function handleBenchmarkWebhook(
         return await handleDailyReportPosted(payload);
       case BENCHMARK_EVENTS.QCP_EXPORTED:
         return await handleQcpExported(payload);
+      case BENCHMARK_EVENTS.REWORK_REQUIRED:
+        return await handleReworkRequired(payload);
       default:
         await logInboundWebhookEvent(event, 'inbound', payload as Record<string, unknown>, 'processed');
         return { action: 'logged_only', details: `Unknown event: ${event}` };
@@ -390,4 +393,100 @@ async function handleQcpExported(payload: BenchmarkWebhookPayload): Promise<Benc
   );
 
   return { action: 'logged', details: 'QCP export logged' };
+}
+
+async function handleReworkRequired(payload: BenchmarkWebhookPayload): Promise<BenchmarkWebhookResult> {
+  const projectId = payload.projectId;
+  if (!projectId) {
+    await logInboundWebhookEvent(
+      BENCHMARK_EVENTS.REWORK_REQUIRED,
+      'inbound',
+      payload as Record<string, unknown>,
+      'ignored'
+    );
+    return { action: 'ignored', details: 'Missing projectId' };
+  }
+
+  const title = payload.ncrNumber
+    ? `Rework required: NCR ${payload.ncrNumber}`
+    : payload.description
+      ? `Rework required: ${payload.description.slice(0, 80)}`
+      : `Rework required: ${payload.ncrId || 'unknown'}`;
+
+  const task = await createReworkTask({
+    projectId,
+    dfowId: payload.dfowId || null,
+    ncrId: payload.ncrId || null,
+    source: 'ncr' as ReworkTaskSource,
+    sourceEventId: (payload.eventId as string) || (payload.referenceId as string) || null,
+    title,
+    description: payload.description || null,
+    status: 'open',
+    priority: 'high',
+    createdBy: 'benchmark-webhook',
+  });
+
+  // Fire-and-forget outbound to Pro's createTask function
+  setImmediate(() => {
+    emitReworkTaskToPro({
+      projectId,
+      dfowId: (payload.dfowId as string | null) || null,
+      unitReference: (payload.unitReference as string | null) || null,
+      ncrId: (payload.ncrId as string | null) || null,
+      ncrNumber: (payload.ncrNumber as string | null) || null,
+      description: (payload.description as string | null) || null,
+      reworkTaskId: task.id,
+    }).catch((err) => {
+      console.warn('[benchmark-inbound] emitReworkTaskToPro failed:', err?.message || err);
+    });
+  });
+
+  await logInboundWebhookEvent(
+    BENCHMARK_EVENTS.REWORK_REQUIRED,
+    'inbound',
+    payload as Record<string, unknown>,
+    'processed'
+  );
+
+  return { action: 'rework_task_created', taskId: task.id, details: `ReworkTask ${task.id} created from rework.required` };
+}
+
+interface ProCreateTaskPayload {
+  projectId: string;
+  dfowId: string | null;
+  unitReference: string | null;
+  ncrId: string | null;
+  ncrNumber: string | null;
+  description: string | null;
+  reworkTaskId: string;
+}
+
+async function emitReworkTaskToPro(payload: ProCreateTaskPayload): Promise<void> {
+  const url = process.env.FIREBASE_FUNCTIONS_URL;
+  if (!url) {
+    return;
+  }
+  const token = process.env.PM_SERVICE_TOKEN;
+  if (!token) {
+    return;
+  }
+
+  const body = JSON.stringify({
+    taskType: 'rework',
+    ...payload,
+    emittedAt: new Date().toISOString(),
+  });
+
+  const res = await fetch(`${url}/createTask`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Service-Token': token,
+    },
+    body,
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from Pro createTask`);
+  }
 }
